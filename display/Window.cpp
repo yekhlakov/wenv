@@ -39,7 +39,7 @@ std::vector<std::wstring> GetMonospaceFonts (HDC hdc)
 
 
 Window::Window(HINSTANCE hInstance, std::wstring title, std::wstring className)
-    : hwnd(NULL), hdc(NULL), font_name(L""), char_width(0), char_height(0), current_display(new Display()), hFont(NULL) {
+    : hwnd(NULL), hdc(NULL), font_name(L"Consolas"), char_width(0), char_height(16), current_display(new Display()), hFont(NULL) {
     
     WNDCLASSEXW wcex;
     wcex.cbSize = sizeof(WNDCLASSEX);
@@ -123,7 +123,7 @@ void Window::set_font(std::wstring name) {
     font_name = name;
 
     hFont = CreateFontW(
-        20, 
+        16,
         0,
         0,
         0,
