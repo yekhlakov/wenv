@@ -1,3 +1,6 @@
+
+#include "Display.h"
+#include "Palette.h"
 #include "Window.h"
 #include "../Resource.h"
 
@@ -38,8 +41,16 @@ std::vector<std::wstring> GetMonospaceFonts (HDC hdc)
 }
 
 
-Window::Window(HINSTANCE hInstance, std::wstring title, std::wstring className)
-    : hwnd(NULL), hdc(NULL), font_name(L"Consolas"), char_width(0), char_height(16), current_display(new Display()), hFont(NULL) {
+Window::Window(HINSTANCE hInstance, std::wstring title, std::wstring className):
+	hwnd {NULL}, 
+	hdc {NULL}, 
+	font_name {L"Consolas"},
+	char_width {0},
+	char_height {32},
+	current_display {new Display()},
+	current_palette {new Palette()},
+	hFont {NULL}
+{
     
     WNDCLASSEXW wcex;
     wcex.cbSize = sizeof(WNDCLASSEX);
@@ -62,6 +73,9 @@ Window::Window(HINSTANCE hInstance, std::wstring title, std::wstring className)
 
     if (hwnd) {
         hdc = GetDC(hwnd);
+
+	set_font (font_name);
+
         monospace_fonts = GetMonospaceFonts(hdc);
         ShowWindow(hwnd, SW_SHOW);
         UpdateWindow(hwnd);
@@ -123,7 +137,7 @@ void Window::set_font(std::wstring name) {
     font_name = name;
 
     hFont = CreateFontW(
-        16,
+        char_height,
         0,
         0,
         0,
@@ -163,56 +177,117 @@ void Window::resize() {
     }
 }
 
-void Window::draw(HDC hdc) {
-    RECT rect;
-    GetClientRect(hwnd, &rect);
-    rect.top = 0;
-    rect.bottom = 24;
-    int size = 16;
-    int cnt = 0;
+void Window::draw (HDC hdc) {
+    HFONT hOldFont = (HFONT) SelectObject (hdc, hFont);
 
-    for (const std::wstring & fontName : monospace_fonts) {
-        COLORREF colors[] = {
-            RGB(0,0,0),
-            RGB(255,0,0),
-            RGB(0,255,0),
-            RGB(255,255,0),
-            RGB(0,0,255),
-            RGB(255,0,255),
-            RGB(0,255,255),
-            RGB(255,255,255),
-        };
+    SetBkMode (hdc, OPAQUE);
+    int current_bg = -1, current_fg = -1;
+    std::wstring current_ln = L"";
 
-        HFONT hFont = CreateFontW(
-            size,
-            0, 0, 0, 
-            FW_NORMAL, 
-            FALSE, FALSE, FALSE,
-            DEFAULT_CHARSET, 
-            OUT_DEFAULT_PRECIS, 
-            CLIP_DEFAULT_PRECIS,
-            DEFAULT_QUALITY, 
-            FF_MODERN, 
-            fontName.c_str());
+    // Helper to draw the batch and reset
+    auto flush_batch = [&] (int x_start, int y_start, std::wstring &str) {
+        if (!str.empty ()) {
+            TextOutW (hdc, x_start * char_width, y_start * char_height, str.c_str (), static_cast<int>(str.length ()));
+            str.clear ();
+        }
+    };
 
-        if (hFont) {
-            HFONT hOldFont = (HFONT)SelectObject(hdc, hFont);
+    for (size_t y = 0; y < current_display->data.size (); ++y) {
+        // Reset row tracking for every new line
+        int row_start_x = 0;
 
-            SetTextColor(hdc, colors[cnt & 7]);
-            SetBkColor(hdc, colors[(cnt + 4) & 7]);
-            SetBkMode(hdc, OPAQUE);
+        for (size_t x = 0; x < current_display->data[y].size (); ++x) {
 
-            DrawTextW(hdc, fontName.c_str(), -1, &rect, DT_VCENTER | DT_SINGLELINE);
+            const Character &ch = current_display->data[y][x];
+            int incoming_fg = ch.fg_color;
+            int incoming_bg = ch.bg_color;
 
-            SelectObject(hdc, hOldFont);
-            DeleteObject(hFont);
+            if (ch.palette_color != -1) {
+                auto entry = current_palette->get_entry (ch.palette_color);
+                incoming_fg = entry.foreground_color;
+                incoming_bg = entry.background_color;
+            }
+
+            // If color changes
+            if (incoming_fg != current_fg || incoming_bg != current_bg) {
+                // 1. Flush the previous color block
+                flush_batch (row_start_x, static_cast<int>(y), current_ln);
+
+                // 2. Apply new colors
+                current_fg = incoming_fg;
+                current_bg = incoming_bg;
+                SetTextColor (hdc, current_fg);
+                SetBkColor (hdc, current_bg);
+
+                // 3. Start new block at current X
+                row_start_x = static_cast<int>(x);
+            }
+
+            current_ln += ch.value;
         }
 
-        cnt++;
-        size += 4;
-        rect.top += 2 + size;
-        rect.bottom = rect.top + 4 + size;
+        // End of row: Flush whatever is left in the current line
+        flush_batch (row_start_x, static_cast<int>(y), current_ln);
+
+        // Reset color state to force a refresh on the next row 
+        // (prevents color bleeding if rows have different starting colors)
+        current_fg = -1;
+        current_bg = -1;
     }
+
+    SelectObject (hdc, hOldFont);
 }
+
+
+/*
+RECT rect;
+GetClientRect(hwnd, &rect);
+rect.top = 0;
+rect.bottom = rect.top + 24;
+int size = 24;
+int cnt = 0;
+
+for (const std::wstring & fontName : monospace_fonts) {
+    COLORREF colors[] = {
+        RGB(0,0,0),
+        RGB(255,0,0),
+        RGB(0,255,0),
+        RGB(255,255,0),
+        RGB(0,0,255),
+        RGB(255,0,255),
+        RGB(0,255,255),
+        RGB(255,255,255),
+    };
+
+    HFONT hFont_loop = CreateFontW(
+        size,
+        0, 0, 0,
+        FW_NORMAL,
+        FALSE, FALSE, FALSE,
+        DEFAULT_CHARSET,
+        OUT_DEFAULT_PRECIS,
+        CLIP_DEFAULT_PRECIS,
+        DEFAULT_QUALITY,
+        FF_MODERN,
+        fontName.c_str());
+
+    if (hFont_loop) {
+        HFONT hOldFont_loop = (HFONT)SelectObject(hdc, hFont_loop);
+
+        SetTextColor(hdc, colors[cnt & 7]);
+        SetBkColor(hdc, colors[(cnt + 4) & 7]);
+        SetBkMode(hdc, OPAQUE);
+
+        DrawTextW(hdc, fontName.c_str(), -1, &rect, DT_VCENTER | DT_SINGLELINE);
+
+        SelectObject(hdc, hOldFont_loop);
+        DeleteObject(hFont_loop);
+    }
+
+    cnt++;
+    rect.top += 2 + size;
+    rect.bottom = rect.top + 4 + size;
+}
+*/
 
 } // namespace Wenv::Display

@@ -3,9 +3,11 @@
 #include <windows.h>
 #include <string>
 #include <vector>
-#include "Display.h"
 
 namespace Wenv::Display {
+
+struct Display;
+struct Palette;
 
 struct Window {
     HWND hwnd;
@@ -13,7 +15,10 @@ struct Window {
     std::wstring font_name;
     int char_width;
     int char_height;
+
     Display* current_display;
+    Palette* current_palette;
+
     HFONT hFont;
     std::vector<std::wstring> monospace_fonts;
 
