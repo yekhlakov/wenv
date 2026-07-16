@@ -27,6 +27,7 @@ struct Window {
 
     void set_font(std::wstring name);
     void resize();
+    void handle_resize (WPARAM wParam, LPARAM lParam);
     void draw(HDC hdc);
 
     static LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);

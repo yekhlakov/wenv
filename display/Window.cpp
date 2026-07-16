@@ -114,7 +114,12 @@ LRESULT CALLBACK Window::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM 
             }
             break;
         case WM_SIZE:
-            pWindow->resize();
+            {
+                if (wParam != SIZE_MINIMIZED)
+                {
+                    pWindow->handle_resize (wParam, lParam);
+                }
+            }
             break;
         case WM_ERASEBKGND:
             return 1;
@@ -164,17 +169,49 @@ void Window::set_font(std::wstring name) {
     char_height = tm.tmHeight;
 }
 
-void Window::resize() {
-    RECT rect;
-    GetClientRect(hwnd, &rect);
-    int width_px = rect.right - rect.left;
-    int height_px = rect.bottom - rect.top;
+void Window::handle_resize (WPARAM wParam, LPARAM lParam) {
+	if (char_width <= 0 || char_height <= 0) {
+		return;
+	}
 
-    if (char_width > 0 && char_height > 0) {
-        size_t width_chars = static_cast<size_t>(width_px / char_width);
-        size_t height_chars = static_cast<size_t>(height_px / char_height);
-        current_display->resize(width_chars, height_chars);
-    }
+	RECT rect;
+	GetClientRect(hwnd, &rect);
+	int width_px = rect.right - rect.left;
+	int height_px = rect.bottom - rect.top;
+
+	int width_chars = width_px / char_width;
+	int height_chars = height_px / char_height;
+
+	if (width_chars > 0 && height_chars > 0) {
+		// Use SWP_NOSIZE to prevent infinite loop if we are already at the correct size
+		// and only resize if the dimensions actually change.
+		// However, since we are snapping to char sizes, we should check if we need to resize.
+		
+		// We need to calculate the new window size based on client area.
+		// For simplicity in this fix, we'll use SetWindowPos with the calculated client area dimensions.
+		// To avoid infinite recursion in WM_SIZE -> SetWindowPos -> WM_SIZE, 
+		// we should ensure we only call SetWindowPos if the new size is different from current window size.
+		
+		RECT window_rect;
+		GetWindowRect(hwnd, &window_rect);
+		int current_width = window_rect.right - window_rect.left;
+		int current_height = window_rect.bottom - window_rect.top;
+
+		// We need to account for non-client area (borders, title bar)
+		// A better way is to use AdjustWindowRect to find the required window size for the target client area.
+		RECT target_client_rect = { 0, 0, width_chars * char_width, height_chars * char_height };
+		RECT target_window_rect = target_client_rect;
+		AdjustWindowRect(&target_window_rect, WS_OVERLAPPEDWINDOW, FALSE);
+
+		int target_width = target_window_rect.right - target_window_rect.left;
+		int target_height = target_window_rect.bottom - target_window_rect.top;
+
+		if (current_width != target_width || current_height != target_height) {
+			SetWindowPos(hwnd, nullptr, 0, 0, target_width, target_height, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+		}
+		
+		current_display->resize(static_cast<size_t>(width_chars), static_cast<size_t>(height_chars));
+	}
 }
 
 void Window::draw (HDC hdc) {

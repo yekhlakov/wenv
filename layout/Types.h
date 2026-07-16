@@ -2,6 +2,7 @@
 
 namespace Wenv
 {
+
 namespace Display
 {
 struct Pos
@@ -17,8 +18,6 @@ struct Rect
 	int width;
 	int height;
 };
-
-
 }
 
 
