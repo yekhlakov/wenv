@@ -141,6 +141,7 @@
   <ItemGroup>
     <ClInclude Include="display\Palette.h" />
     <ClInclude Include="framework.h" />
+    <ClInclude Include="layout\Grid.h" />
     <ClInclude Include="layout\Layout.h" />
     <ClInclude Include="layout\Types.h" />
     <ClInclude Include="maxy\strings.h" />
@@ -154,6 +155,7 @@
   <ItemGroup>
     <ClCompile Include="display\Display-Output.cpp" />
     <ClCompile Include="display\Palette.cpp" />
+    <ClCompile Include="layout\Grid.cpp" />
     <ClCompile Include="layout\Layout.cpp" />
     <ClCompile Include="maxy\strings.cpp" />
     <ClCompile Include="wenv.cpp" />

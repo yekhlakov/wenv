@@ -31,16 +31,16 @@ struct Display
  	void set_color (int pc = 0, int fg = 0, int bg = 0);
 
 	// Print character to specified position
-	void print_char (size_t ln, size_t pos, wchar_t ch);
+	void print_char (size_t pos, size_t ln, wchar_t ch);
 
 	// Print line left to right starting from specified position
-	void print_line (size_t ln, size_t pos, const std::wstring & s);
+	void print_line (size_t pos, size_t ln, const std::wstring & s);
 
 	// Print line top to bottom starting from specified position
-	void print_line_v (size_t ln, size_t pos, const std::wstring & s);
+	void print_line_v (size_t pos, size_t ln, const std::wstring & s);
 
 	// Draw rectangular box with constant border
-	void draw_box (size_t ln, size_t pos, size_t w, size_t h, int btype);
+	void draw_box (size_t pos, size_t ln, size_t w, size_t h, int btype);
 };
 
 } // namespace Wenv::Display

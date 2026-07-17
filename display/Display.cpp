@@ -1,4 +1,5 @@
 #include "Display.h"
+#include "../Layout/Grid.h"
 #include <random>
 
 namespace Wenv::Display
@@ -14,6 +15,7 @@ void Display::resize(size_t width, size_t height)
     std::uniform_int_distribution<int> palette_dist(0, 16);
     //std::uniform_int_distribution<int> color_dist(0, 0xFFFFFF);
 
+
     for (size_t y = 0; y < height; ++y) {
         data[y].resize(width);
         for (size_t x = 0; x < width; ++x) {
@@ -28,8 +30,27 @@ void Display::resize(size_t width, size_t height)
         }
     }
 
-    draw_box (4, 4, width - 8, height - 8, 2);
-    draw_box (8, 8, width - 16, height - 16, 1);
+
+
+	::Wenv::Layout::Grid grid;
+
+
+	grid.add_row (0, 0, 50.0);
+	grid.add_row (0, 0, 50.0);
+	grid.add_column (0, 0, 50.0);
+	grid.add_column (0, 0, 50.0);
+	grid.is_exclusive = true;
+
+	auto b = grid.get_block_dimensions ({0, 0, (int) width, (int) height}, {0, 0, 1, 1});
+
+	draw_box (b.x, b.y, b.width, b.height, 2);
+    b = grid.get_block_dimensions ({ 0, 0, (int) width, (int) height }, { 1, 0, 1, 1 });
+    draw_box (b.x, b.y, b.width, b.height, 2);
+    b = grid.get_block_dimensions ({ 0, 0, (int) width, (int) height }, { 0, 1, 2, 1 });
+    draw_box (b.x, b.y, b.width, b.height, 1);
+
+    //draw_box (4, 4, width - 8, height - 8, 2);
+    //draw_box (8, 8, width - 16, height - 16, 1);
 }
 
 
