@@ -36,18 +36,40 @@ void Display::resize(size_t width, size_t height)
 
 
 	grid.add_row (0, 0, 50.0);
-	grid.add_row (0, 0, 50.0);
-	grid.add_column (0, 0, 50.0);
-	grid.add_column (0, 0, 50.0);
-	grid.is_exclusive = true;
+	grid.add_row (0, 0, 25.0);
+    grid.add_row (0, 0, 25.0);
+	grid.add_column (0, 0, 33.0);
+	grid.add_column (0, 0, 17.0);
+    grid.add_column (0, 0, 50.0);
+	grid.is_exclusive = false;
 
-	auto b = grid.get_block_dimensions ({0, 0, (int) width, (int) height}, {0, 0, 1, 1});
+    grid.add_block ({ 0, 0, 2, 1 }, 1);
+    grid.add_block ({ 2, 0, 1, 1 }, 0);
+    grid.add_block ({ 0, 1, 1, 2 }, 2);
+    grid.add_block ({ 1, 1, 2, 1 }, 1);
+    grid.add_block ({ 1, 2, 2, 1 }, 2);
 
-	draw_box (b.x, b.y, b.width, b.height, 2);
-    b = grid.get_block_dimensions ({ 0, 0, (int) width, (int) height }, { 1, 0, 1, 1 });
+    grid.bake ({ 0, 0, (int) width, (int) height });
+
+    for (auto &b : grid.blocks)
+    {
+        draw_block (b);
+    }
+
+    /*
+	auto b = grid.get_block_dimensions ({0, 0, (int) width, (int) height}, {0, 0, 2, 1});
+	draw_box (b.x, b.y, b.width, b.height, 1);
+    b = grid.get_block_dimensions ({ 0, 0, (int) width, (int) height }, { 2, 0, 1, 1 });
+    draw_box (b.x, b.y, b.width, b.height, 0);
+
+    b = grid.get_block_dimensions ({ 0, 0, (int) width, (int) height }, { 0, 1, 1, 2 });
     draw_box (b.x, b.y, b.width, b.height, 2);
-    b = grid.get_block_dimensions ({ 0, 0, (int) width, (int) height }, { 0, 1, 2, 1 });
+
+    b = grid.get_block_dimensions ({ 0, 0, (int) width, (int) height }, { 1, 1, 2, 1 });
     draw_box (b.x, b.y, b.width, b.height, 1);
+    b = grid.get_block_dimensions ({ 0, 0, (int) width, (int) height }, { 1, 2, 2, 1 });
+    draw_box (b.x, b.y, b.width, b.height, 2);
+    */
 
     //draw_box (4, 4, width - 8, height - 8, 2);
     //draw_box (8, 8, width - 16, height - 16, 1);

@@ -1,5 +1,6 @@
 #include "Display.h"
 #include "../maxy/strings.h"
+#include "../layout/Grid.h"
 
 namespace Wenv::Display
 {
@@ -48,6 +49,13 @@ void Display::print_line_v (size_t pos, size_t ln, const std::wstring & s)
 	}
 }
 
+void Display::draw_block (::Wenv::Layout::Block &b)
+{
+	print_line (b.container_dimensions.x, b.container_dimensions.y, b.top_boundary);
+	print_line_v (b.container_dimensions.x, b.container_dimensions.y + 1, b.left_boundary);
+	print_line_v (b.container_dimensions.x + b.container_dimensions.width - 1, b.container_dimensions.y + 1, b.right_boundary);
+	print_line (b.container_dimensions.x, b.container_dimensions.y + b.container_dimensions.height - 1, b.bottom_boundary);
+}
 
 // Draw rectangular box with constant border
 void Display::draw_box (size_t pos, size_t ln, size_t w, size_t h, int btype)

@@ -74,7 +74,7 @@ Window::Window(HINSTANCE hInstance, std::wstring title, std::wstring className):
     if (hwnd) {
         hdc = GetDC(hwnd);
 
-	set_font (font_name);
+	    set_font (font_name);
 
         monospace_fonts = GetMonospaceFonts(hdc);
         ShowWindow(hwnd, SW_SHOW);
@@ -82,56 +82,77 @@ Window::Window(HINSTANCE hInstance, std::wstring title, std::wstring className):
     }
 }
 
-Window::~Window() {
-    if (hFont) {
-        DeleteObject(hFont);
+Window::~Window()
+{
+    if (hFont)
+    {
+        DeleteObject (hFont);
     }
-    if (hdc) {
-        ReleaseDC(hwnd, hdc);
+
+    if (hdc)
+    {
+        ReleaseDC (hwnd, hdc);
     }
+
     delete current_display;
 }
 
-LRESULT CALLBACK Window::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK Window::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+{
     Window* pWindow = nullptr;
 
-    if (message == WM_NCCREATE) {
+    if (message == WM_NCCREATE)
+    {
         CREATESTRUCT* pCreateStruct = reinterpret_cast<CREATESTRUCT*>(lParam);
         pWindow = reinterpret_cast<Window*>(pCreateStruct->lpCreateParams);
         SetWindowLongPtr(hWnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(pWindow));
-    } else {
+    }
+    else
+    {
         pWindow = reinterpret_cast<Window*>(GetWindowLongPtr(hWnd, GWLP_USERDATA));
     }
 
-    if (pWindow) {
-        switch (message) {
-        case WM_PAINT:
-            {
-                PAINTSTRUCT ps;
-                BeginPaint(hWnd, &ps);
-                pWindow->draw(ps.hdc);
-                EndPaint(hWnd, &ps);
-            }
-            break;
-        case WM_SIZE:
-            {
-                if (wParam != SIZE_MINIMIZED)
-                {
-                    pWindow->handle_resize (wParam, lParam);
-                }
-            }
-            break;
-        case WM_ERASEBKGND:
-            return 1;
-        case WM_DESTROY:
-            PostQuitMessage(0);
-            break;
-        default:
-            return DefWindowProc(hWnd, message, wParam, lParam);
-        }
-        return 0;
+    if (!pWindow)
+    {
+        return DefWindowProc (hWnd, message, wParam, lParam);
     }
-    return DefWindowProc(hWnd, message, wParam, lParam);
+
+    switch (message)
+    {
+    case WM_PAINT:
+        {
+            PAINTSTRUCT ps;
+            BeginPaint(hWnd, &ps);
+            pWindow->draw(ps.hdc);
+            EndPaint(hWnd, &ps);
+        }
+        break;
+
+    case WM_SIZING:
+        pWindow->handle_resizing (wParam, lParam);
+        break;
+
+    case WM_SIZE:
+        {
+            if (wParam != SIZE_MINIMIZED)
+            {
+                pWindow->handle_resize (wParam, lParam);
+            }
+        }
+        break;
+
+    case WM_ERASEBKGND:
+        return 1;
+
+    case WM_DESTROY:
+        PostQuitMessage(0);
+        break;
+
+    default:
+        return DefWindowProc(hWnd, message, wParam, lParam);
+    }
+
+    return 0;    
 }
 
 void Window::set_font(std::wstring name) {
@@ -169,47 +190,77 @@ void Window::set_font(std::wstring name) {
     char_height = tm.tmHeight;
 }
 
-void Window::handle_resize (WPARAM wParam, LPARAM lParam) {
-	if (char_width <= 0 || char_height <= 0) {
-		return;
-	}
+void Window::handle_resizing (WPARAM wParam, LPARAM lParam)
+{
+    if (char_width <= 0 || char_height <= 0)
+    {
+        return;
+    }
 
-	RECT rect;
-	GetClientRect(hwnd, &rect);
-	int width_px = rect.right - rect.left;
-	int height_px = rect.bottom - rect.top;
+    RECT client_rect, window_rect;
+    GetClientRect (hwnd, &client_rect);
+    GetWindowRect (hwnd, &window_rect);
+
+    // Compute size difference between window client area and its gross area
+    int dw = (window_rect.right - window_rect.left) - (client_rect.right - client_rect.left);
+    int dh = (window_rect.bottom - window_rect.top) - (client_rect.bottom - client_rect.top);
+
+    // Supposed new window size
+    RECT *rect = (RECT *) lParam;
+
+    // Sizes in pixels
+    int width_px = rect->right - rect->left;
+    int height_px = rect->bottom - rect->top;
+
+    // Sizes in characters
+    int width_chars = (width_px - dw) / char_width;
+    int height_chars = (height_px - dh) / char_height;
+
+    // Target width in pixels (snapped to character size)
+    int target_width = width_chars * char_width + dw;
+    int target_height = height_chars * char_height + dh;
+
+    // Now adjust the dragged edge position
+    if (wParam == WMSZ_RIGHT || wParam == WMSZ_BOTTOMRIGHT || wParam == WMSZ_TOPRIGHT)
+    {
+        // Adjust right edge
+        rect->right = rect->left + target_width;
+    }
+
+    if (wParam == WMSZ_LEFT || wParam == WMSZ_BOTTOMLEFT || wParam == WMSZ_TOPLEFT)
+    {
+        // Adjust left edge
+        rect->left = rect->right - target_width;
+    }
+
+    if (wParam == WMSZ_BOTTOM || wParam == WMSZ_BOTTOMLEFT || wParam == WMSZ_BOTTOMRIGHT)
+    {
+        // Adjust bottom edge
+        rect->bottom = rect->top + target_height;
+    }
+
+    if (wParam == WMSZ_TOP || wParam == WMSZ_TOPLEFT || wParam == WMSZ_TOPRIGHT)
+    {
+        // Adjust top edge
+        rect->top = rect->bottom - target_height;
+    }
+}
+
+void Window::handle_resize (WPARAM wParam, LPARAM lParam)
+{
+    if (char_width <= 0 || char_height <= 0)
+    {
+        return;
+    }
+
+    int width_px = LOWORD (lParam);
+    int height_px = HIWORD (lParam);
 
 	int width_chars = width_px / char_width;
 	int height_chars = height_px / char_height;
 
-	if (width_chars > 0 && height_chars > 0) {
-		// Use SWP_NOSIZE to prevent infinite loop if we are already at the correct size
-		// and only resize if the dimensions actually change.
-		// However, since we are snapping to char sizes, we should check if we need to resize.
-		
-		// We need to calculate the new window size based on client area.
-		// For simplicity in this fix, we'll use SetWindowPos with the calculated client area dimensions.
-		// To avoid infinite recursion in WM_SIZE -> SetWindowPos -> WM_SIZE, 
-		// we should ensure we only call SetWindowPos if the new size is different from current window size.
-		
-		RECT window_rect;
-		GetWindowRect(hwnd, &window_rect);
-		int current_width = window_rect.right - window_rect.left;
-		int current_height = window_rect.bottom - window_rect.top;
-
-		// We need to account for non-client area (borders, title bar)
-		// A better way is to use AdjustWindowRect to find the required window size for the target client area.
-		RECT target_client_rect = { 0, 0, width_chars * char_width, height_chars * char_height };
-		RECT target_window_rect = target_client_rect;
-		AdjustWindowRect(&target_window_rect, WS_OVERLAPPEDWINDOW, FALSE);
-
-		int target_width = target_window_rect.right - target_window_rect.left;
-		int target_height = target_window_rect.bottom - target_window_rect.top;
-
-		if (current_width != target_width || current_height != target_height) {
-			SetWindowPos(hwnd, nullptr, 0, 0, target_width, target_height, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
-		}
-		
+	if (width_chars > 0 && height_chars > 0)
+    {
 		current_display->resize(static_cast<size_t>(width_chars), static_cast<size_t>(height_chars));
 	}
 }

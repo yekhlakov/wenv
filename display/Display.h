@@ -7,6 +7,8 @@
 namespace Wenv::Layout
 {
 struct Layout;
+struct Grid;
+struct Block;
 }
 
 namespace Wenv::Display {
@@ -38,6 +40,9 @@ struct Display
 
 	// Print line top to bottom starting from specified position
 	void print_line_v (size_t pos, size_t ln, const std::wstring & s);
+
+	// Draw a grid block (using its boundary strings)
+	void draw_block (::Wenv::Layout::Block &b);
 
 	// Draw rectangular box with constant border
 	void draw_box (size_t pos, size_t ln, size_t w, size_t h, int btype);
