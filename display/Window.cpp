@@ -144,9 +144,28 @@ LRESULT CALLBACK Window::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM 
     case WM_ERASEBKGND:
         return 1;
 
+    case WM_CLOSE:
+        DestroyWindow (hWnd);
+        break;
+
     case WM_DESTROY:
         PostQuitMessage(0);
         break;
+
+    case WM_SYSKEYDOWN:
+
+        if (wParam == VK_F10)
+        {
+            // Shortcut to kill the application
+            DestroyWindow (hWnd);
+        }
+        else if (wParam == VK_SHIFT)
+        {
+            // Alt+Shift switches keyboard layout
+            ActivateKeyboardLayout ((HKL) HKL_NEXT, 0);
+        }
+
+        return 0; // Don't propagate syskeys to default window proc
 
     default:
         return DefWindowProc(hWnd, message, wParam, lParam);

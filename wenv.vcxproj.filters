@@ -42,13 +42,19 @@
     <ClInclude Include="display\Window.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
-    <ClInclude Include="layout\Types.h">
-      <Filter>Файлы заголовков</Filter>
-    </ClInclude>
     <ClInclude Include="maxy\strings.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
     <ClInclude Include="layout\Grid.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="apps\App.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="Types.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="apps\FuncMenu.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
   </ItemGroup>
@@ -83,6 +89,9 @@
     <ClCompile Include="layout\Grid.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
+    <ClCompile Include="apps\FuncMenu.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="wenv.rc">
@@ -96,5 +105,10 @@
   </ItemGroup>
   <ItemGroup>
     <Manifest Include="app.manifest" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="apps\App.cpp">
+      <Filter>Исходные файлы</Filter>
+    </None>
   </ItemGroup>
 </Project>

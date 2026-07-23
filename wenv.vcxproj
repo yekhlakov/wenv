@@ -139,20 +139,23 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="apps\App.h" />
+    <ClInclude Include="apps\FuncMenu.h" />
     <ClInclude Include="display\Palette.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="layout\Grid.h" />
     <ClInclude Include="layout\Layout.h" />
-    <ClInclude Include="layout\Types.h" />
     <ClInclude Include="maxy\strings.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="targetver.h" />
+    <ClInclude Include="Types.h" />
     <ClInclude Include="wenv.h" />
     <ClInclude Include="display\Character.h" />
     <ClInclude Include="display\Display.h" />
     <ClInclude Include="display\Window.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="apps\FuncMenu.cpp" />
     <ClCompile Include="display\Display-Output.cpp" />
     <ClCompile Include="display\Palette.cpp" />
     <ClCompile Include="layout\Grid.cpp" />
@@ -172,6 +175,9 @@
   </ItemGroup>
   <ItemGroup>
     <Manifest Include="app.manifest" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="apps\App.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

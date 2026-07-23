@@ -1,11 +1,17 @@
 #pragma once
 #include <string>
 #include <vector>
-#include "Types.h"
+#include "../Types.h"
+
+namespace Wenv::Apps {
+class App;
+}
 
 namespace Wenv::Layout {
 
 using Dimensions = ::Wenv::Display::Rect;
+
+struct Grid;
 
 // The visible cell of the grid. A block occupies a rectangle of n*m contiguous cells
 struct Block : public Dimensions
@@ -14,7 +20,13 @@ struct Block : public Dimensions
 	// 0 - empty boundary (made of whitespace)
 	// 1 - single-line boundary
 	// 2 = double line boundary
-	int btype;
+	int btype = 1;
+
+	// Nested grid
+	Grid *grid = nullptr;
+
+	// Attached app
+	::Wenv::Apps::App *app = nullptr;
 
 	Dimensions container_dimensions;
 
@@ -26,10 +38,12 @@ struct Block : public Dimensions
 
 struct Grid
 {
+	using Sizes = std::vector<std::pair<int, int>>;
+
 	struct Constraint
 	{
-		int min_client_size;
-		int max_client_size;
+		int min_size;
+		int max_size;
 		float percent_size;
 	};
 
@@ -47,20 +61,26 @@ struct Grid
 	// Add underlying grid column
 	void add_column (int min_size, int max_size, float percent_size);
 	// Add grid block (possibly occupying more than one underlying cell)
-	void add_block (Dimensions grid_block_dimensions, int btype);
+	void add_block (Dimensions grid_block_dimensions, int btype, Grid *nested_grid = nullptr, ::Wenv::Apps::App * app = nullptr);
 	// Bake the grid (compute dimensions and boundary strings for all its blocks)
-	void bake (Dimensions container_dimensions);
+	void bake (Dimensions container_dimensions, std::vector<std::vector<wchar_t>> & buffer);
 
-	// Helper to compute block dimensions
-	Dimensions get_block_dimensions (Dimensions container_dimensions, Block grid_block_dimensions);
 
-	// Helper to calculate client sizes for all underlying rows and columns
-	std::vector<int> calculate_client_sizes
+	// Calculate gross sizes for each underlying cell
+	// return pairs {start_pos, size} for each cell
+	Sizes calculate_gross_sizes
 	(
 		const std::vector<Constraint> &constraints,
-		int total_available_size,
-		size_t count
+		int total_available_size
 	) const;
+
+	// Calculate dimensions for given block using gross sizes of underlying rows and cols
+	Dimensions calculate_block_dimensions (
+		Dimensions container_dimensions, 
+		Block grid_block_dimensions,
+		const std::vector<std::pair<int, int>> & gross_row_sizes,
+		const std::vector<std::pair<int, int>> & gross_col_sizes
+	);
 };
 
 } // namespace Wenv::Layout

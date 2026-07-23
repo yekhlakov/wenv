@@ -15,233 +15,250 @@ void Grid::add_column (int min_size, int max_size, float percent_size)
 	column_constraints.push_back ({min_size, max_size, percent_size});
 }
 
-std::vector<int> Grid::calculate_client_sizes
+// add one to the size of the last element in sizes that allows this subtraction
+bool modify_size (Grid::Sizes &sizes, const std::vector<Grid::Constraint> &constraints, int addition)
+{
+	for (int p = (int) sizes.size () - 1; p >= 0; p--)
+	{
+		if (constraints[p].percent_size != 0)
+		{
+			// Skip percentage constraints
+			continue;
+		}
+
+		auto tentative_size = sizes[p].second + addition;
+
+		if (tentative_size < constraints[p].min_size || tentative_size > constraints[p].max_size)
+		{
+			// Cannot further modify this size 
+			continue;
+		}
+
+		// We found a size that can be modified
+		sizes[p].second = tentative_size;
+
+		// Now shift all offsets that are after it
+		for (int q = p + 1; q < (int) sizes.size (); q++)
+		{
+			sizes[q].first += addition;
+		}
+
+		return true;
+	}
+
+	// Could not find a flex size, so pick the last percentage size
+	for (int p = (int) sizes.size () - 1; p >= 0; p--)
+	{
+		if (constraints[p].percent_size == 0)
+		{
+			// Skip flex constraints
+			continue;
+		}
+
+		auto tentative_size = sizes[p].second + addition;
+
+		if (tentative_size < 2)
+		{
+			// Cannot further modify this size 
+			continue;
+		}
+
+		// We found a size that can be modified
+		sizes[p].second = tentative_size;
+
+		// Now shift all offsets that are after it
+		for (int q = p + 1; q < (int) sizes.size (); q++)
+		{
+			sizes[q].first += addition;
+		}
+
+		return true;
+	}
+
+	// Could not find a size to modify AT ALL
+	return false;
+}
+
+Grid::Sizes Grid::calculate_gross_sizes
 (
+	// List of constraints
 	const std::vector<Constraint> &constraints,
-	int total_available_size,
-	size_t count
+	// Total container size (in characters)
+	int total_available_size
 ) const
 {
-	std::vector<int> sizes (count, 0);
+	auto count = constraints.size ();
 
-	if (count == 0 || total_available_size <= 0) 
+	Sizes sizes (count, { 0, 0 });
+
+	if (count == 0)
 	{
 		return sizes;
 	}
 
-	// First pass: apply percentage constraints
-	int remaining_size = total_available_size;
-	int fixed_count = 0;
-
-	for (auto i = 0; i < count; ++i) 
+	if (is_exclusive && total_available_size < count * 2)
 	{
-		if (i < static_cast<int> (constraints.size ()) && constraints[i].percent_size > 0) 
-		{
-			sizes[i] = static_cast<int> (round ((double) total_available_size * constraints[i].percent_size / 100.0));
+		return sizes;
+	}
 
-			// Apply min/max constraints
-			if (i < static_cast<int> (constraints.size ())) 
+	if (!is_exclusive && total_available_size < count + 1)
+	{
+		return sizes;
+	}
+
+	// How many space is left for flex-size elements
+	auto flex_size = total_available_size;
+
+	// Iterate percent elements first
+	size_t p = 0;
+	size_t num_flex_elements = count;
+	for (auto &cell : constraints)
+	{
+		if (cell.percent_size == 0.0)
+		{
+			p++;
+			continue;
+		}
+
+		int actual_size = (int) round (total_available_size * 0.01 * cell.percent_size) + !is_exclusive;
+
+		// respect fixed size constraints
+		if (cell.min_size != 0)
+		{
+			actual_size = std::max (cell.min_size, actual_size);
+		}
+		if (cell.max_size != 0)
+		{
+			actual_size = std::min (cell.max_size, actual_size);
+		}
+
+		sizes[p].second = actual_size;
+		flex_size -= actual_size;
+		if (!is_exclusive)
+		{
+			flex_size ++;
+		}
+		num_flex_elements--;
+
+		p++;
+	}
+
+	if (num_flex_elements)
+	{
+		auto default_flex_percentage = 1. / num_flex_elements;
+		// Iterate flexible elements
+		size_t p = 0;
+		for (auto &cell : constraints)
+		{
+			if (cell.percent_size != 0.0)
 			{
-				if (constraints[i].min_client_size > 0) 
-				{
-					sizes[i] = std::max (sizes[i], constraints[i].min_client_size);
-				}
-				if (constraints[i].max_client_size > 0) 
-				{
-					sizes[i] = std::min (sizes[i], constraints[i].max_client_size);
-				}
+				p++;
+				continue;
 			}
 
-			remaining_size -= sizes[i];
-			fixed_count++;
+			int actual_size = (int) round (flex_size * default_flex_percentage) + !is_exclusive;
+
+			// respect fixed size constraints
+			if (cell.min_size != 0)
+			{
+				actual_size = std::max (cell.min_size, actual_size);
+			}
+			if (cell.max_size != 0)
+			{
+				actual_size = std::min (cell.max_size, actual_size);
+			}
+
+			sizes[p].second = actual_size;
+
+			p++;
 		}
 	}
 
-	// Second pass: distribute remaining size among non-percentage columns/rows
-	int flexible_count = (int) count - fixed_count;
-	if (flexible_count <= 0 || remaining_size <= 0)
+	// Now compute offsets
+	auto sum = 0;
+	for (auto &cell : sizes)
 	{
-		return sizes;
+		cell.first = sum;
+
+		sum += cell.second;
+		if (!is_exclusive)
+		{
+			sum--;
+		}
 	}
 
-	int equal_share = remaining_size / flexible_count;
-	int remainder = remaining_size % flexible_count;
-
-	int flex_idx = 0;
-	for (size_t i = 0; i < count; ++i) 
+	if (!is_exclusive)
 	{
-		if (i < constraints.size () && constraints[i].percent_size != 0)
-		{
-			continue;
-		}
-
-		sizes[i] = equal_share + (flex_idx < remainder ? 1 : 0);
-
-		flex_idx++;
-
-		// Apply min/max constraints
-		if (i >= constraints.size ())
-		{
-			continue;
-		}
-
-		if (constraints[i].min_client_size > 0) 
-		{
-			sizes[i] = std::max (sizes[i], constraints[i].min_client_size);
-		}
-		if (constraints[i].max_client_size > 0) 
-		{
-			sizes[i] = std::min (sizes[i], constraints[i].max_client_size);
-		}
+		sum++;
 	}
+
+	// Adjust the last element size to fit the whole container (to fix rounding errors)
+	
+	while (sum < total_available_size)
+	{
+		if (!modify_size (sizes, constraints, +1))
+		{
+			break;
+		}
+
+		sum++;
+	}
+	
+	while (sum > total_available_size)
+	{
+		if (!modify_size (sizes, constraints, -1))
+		{
+			break;
+		}
+
+		sum--;
+	}
+	
 
 	return sizes;
 }
 
-Dimensions Grid::get_block_dimensions (Dimensions container_dimensions, Block grid_block_dimensions)
+// Calculate dimensions for given block using gross sizes of underlying rows and cols
+Dimensions Grid::calculate_block_dimensions (
+	Dimensions container_dimensions,
+	Block grid_block_dimensions,
+	const std::vector<std::pair<int, int>> &gross_row_sizes,
+	const std::vector<std::pair<int, int>> &gross_col_sizes
+)
 {
 	Dimensions result;
-	result.x = container_dimensions.x;
-	result.y = container_dimensions.y;
 
-	int start_col = grid_block_dimensions.x;
-	int start_row = grid_block_dimensions.y;
-	int num_cols = grid_block_dimensions.width;
-	int num_rows = grid_block_dimensions.height;
+	result.x = container_dimensions.x + gross_col_sizes[grid_block_dimensions.x].first;
+	result.y = container_dimensions.y + gross_row_sizes[grid_block_dimensions.y].first;
 
-	// Validate bounds
-	if (start_col < 0 || start_row < 0 || num_cols <= 0 || num_rows <= 0)
-	{
-		result.width = 0;
-		result.height = 0;
+	auto endx = container_dimensions.x
+		+ gross_col_sizes[grid_block_dimensions.x + grid_block_dimensions.width - 1].first
+		+ gross_col_sizes[grid_block_dimensions.x + grid_block_dimensions.width - 1].second;
 
-		return result;
-	}
+	auto endy = container_dimensions.y
+		+ gross_row_sizes[grid_block_dimensions.y + grid_block_dimensions.height - 1].first
+		+ gross_row_sizes[grid_block_dimensions.y + grid_block_dimensions.height - 1].second;
 
-	if (start_col + num_cols > column_constraints.size() || start_row + num_rows > row_constraints.size())
-	{
-		result.width = 0;
-		result.height = 0;
-
-		return result;
-	}
-
-	// Calculate available space for content (subtracting border overhead)
-	// In exclusive mode: each cell has 2 borders, so total border space = 2 * n_columns
-	// In non-exclusive mode: there are (n_columns + 1) vertical border lines
-	int available_width_for_content;
-	int available_height_for_content;
-
-	if (is_exclusive)
-	{
-		// Each column has its own complete border (left + right = 2 chars per column)
-		available_width_for_content = container_dimensions.width - 2 * (int) column_constraints.size();
-		available_height_for_content = container_dimensions.height - 2 * (int) row_constraints.size();
-	}
-	else
-	{
-		// Shared borders: (n_columns + 1) vertical lines, (n_rows + 1) horizontal lines
-		available_width_for_content = container_dimensions.width - (int) (column_constraints.size() + 1);
-		available_height_for_content = container_dimensions.height - (int) (column_constraints.size() + 1);
-	}
-
-	// Ensure we don't go negative
-	available_width_for_content = std::max (0, available_width_for_content);
-	available_height_for_content = std::max (0, available_height_for_content);
-
-	// Calculate client sizes for all columns and rows
-	std::vector<int> col_client_sizes = calculate_client_sizes
-	(
-		column_constraints, 
-		available_width_for_content, 
-		column_constraints.size()
-	);
-	std::vector<int> row_client_sizes = calculate_client_sizes 
-	(
-		row_constraints, 
-		available_height_for_content, 
-		row_constraints.size()
-	);
-
-	// Sum up the client sizes for all previous columns/rows
-	for (int c = 0; c < start_col; c++)
-	{
-		result.x += col_client_sizes[c];
-	}
-
-	for (int r = 0; r < start_row; r++)
-	{
-		result.y += row_client_sizes[r];
-	}
-
-	// Sum up the client sizes for the block
-	int block_client_width = 0;
-	for (int c = start_col; c < start_col + num_cols; ++c) 
-	{
-		block_client_width += col_client_sizes[c];
-	}
-	int block_client_height = 0;
-	for (int r = start_row; r < start_row + num_rows; ++r) 
-	{
-		block_client_height += row_client_sizes[r];
-	}
-
-	// Add border space for the block
-	if (is_exclusive) 
-	{
-		result.x += start_col * 2;
-		result.y += start_row * 2;
-
-		// Each cell in the block has its own borders
-		// For num_cols columns: each contributes 2 border chars (left + right)
-		result.width = block_client_width + 2 * num_cols;
-		result.height = block_client_height + 2 * num_rows;
-	}
-	else 
-	{
-		result.x += start_col;
-		result.y += start_row;
-
-		// Shared borders: (num_cols + 1) vertical border lines, (num_rows + 1) horizontal
-		result.width = block_client_width + (num_cols + 1);
-		result.height = block_client_height + (num_rows + 1);
-	}
-
-	if (result.x + result.width == container_dimensions.width - 1)
-	{
-		result.width++;
-	}
-	else if (result.x + result.width == container_dimensions.width + 1)
-	{
-		result.width--;
-	}
-
-	if (result.y + result.height == container_dimensions.height - 1)
-	{
-		result.height++;
-	}
-	else if (result.y + result.height == container_dimensions.height + 1)
-	{
-		result.height--;
-	}
+	result.width = endx - result.x;
+	result.height = endy - result.y;
 
 	return result;
 }
 
-void Grid::add_block (Dimensions grid_block_dimensions, int btype)
+void Grid::add_block (Dimensions grid_block_dimensions, int btype, Grid * nested_grid, ::Wenv::Apps::App * app)
 {
-	blocks.push_back ({ grid_block_dimensions, btype });
+	blocks.push_back ({ grid_block_dimensions, btype, nested_grid, app });
 }
 
-void Grid::bake (Dimensions container_dimensions)
+void Grid::bake (Dimensions container_dimensions, std::vector<std::vector<wchar_t>> & buffer)
 {
+	auto cols = calculate_gross_sizes (column_constraints, (int) container_dimensions.width);
+	auto rows = calculate_gross_sizes (row_constraints, (int) container_dimensions.height);
+
 	for (auto &b : blocks)
 	{
-		b.container_dimensions = get_block_dimensions (container_dimensions, b);
+		b.container_dimensions = calculate_block_dimensions (container_dimensions, b, rows, cols);
 	}
-
-	// Char buffer to hold boundary texts
-	std::vector<std::vector<wchar_t>> buffer (container_dimensions.height, std::vector<wchar_t> (container_dimensions.width + 1, L' '));
 
 	auto u = [] (const char *p)->wchar_t { return maxy::strings::utf8towchar (p)[0]; };
 
@@ -427,6 +444,15 @@ void Grid::bake (Dimensions container_dimensions)
 		{
 			put_char (element_base[b.btype][1][0], b.container_dimensions.x, b.container_dimensions.y + y);
 			put_char (element_base[b.btype][1][0], b.container_dimensions.x + b.container_dimensions.width - 1, b.container_dimensions.y + y);
+		}
+	}
+
+	// Process nested grids
+	for (auto &b : blocks)
+	{
+		if (b.grid != nullptr)
+		{
+			b.grid->bake (b.container_dimensions, buffer);
 		}
 	}
 

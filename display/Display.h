@@ -41,6 +41,9 @@ struct Display
 	// Print line top to bottom starting from specified position
 	void print_line_v (size_t pos, size_t ln, const std::wstring & s);
 
+	// Draw a grid (recursively)
+	void draw_grid (::Wenv::Layout::Grid &grid);
+
 	// Draw a grid block (using its boundary strings)
 	void draw_block (::Wenv::Layout::Block &b);
 

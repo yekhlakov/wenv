@@ -103,6 +103,5 @@ void Display::draw_box (size_t pos, size_t ln, size_t w, size_t h, int btype)
 	print_line_v (pos + w - 1, ln + 1, vert);
 	print_line (pos, ln + h - 1, bottom);
 }
-	
 
 }
