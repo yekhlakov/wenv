@@ -13,9 +13,16 @@ struct Window {
     HWND hwnd;
     HDC hdc;
     std::wstring font_name;
+
+    // sizes of character
     int char_width;
     int char_height;
 
+    // Window size
+    int container_width;
+    int container_height;
+
+    std::vector<Display *> displays;
     Display* current_display;
     Palette* current_palette;
 
@@ -24,6 +31,9 @@ struct Window {
 
     Window(HINSTANCE hInstance, std::wstring title, std::wstring className);
     ~Window();
+
+    // Create displays, grids, apps etc
+    void initialize ();
 
     void set_font(std::wstring name);
     void handle_resizing (WPARAM wParam, LPARAM lParam);

@@ -472,4 +472,21 @@ void Grid::bake (Dimensions container_dimensions, std::vector<std::vector<wchar_
 	}
 }
 
+Dimensions Block::get_client_dimensions () const
+{
+	if (btype < 0)
+	{
+		return container_dimensions;
+	}
+
+	return Dimensions
+	{
+		container_dimensions.x + 1,
+		container_dimensions.y + 1,
+		container_dimensions.x + container_dimensions.width - 2,
+		container_dimensions.y + container_dimensions.height - 2,
+	};
+}
+
+
 } // namespace Wenv::Layout

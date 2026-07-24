@@ -6,6 +6,14 @@
 namespace Wenv::Display
 {
 
+Display::~Display ()
+{
+    if (grid != nullptr)
+    {
+        delete grid;
+    }
+}
+
 void Display::resize (size_t width, size_t height)
 {
     data.resize (height);
@@ -31,59 +39,28 @@ void Display::resize (size_t width, size_t height)
         }
     }
 
-
-
-    ::Wenv::Layout::Grid grid, subgrid;
-
-    subgrid.add_row (0, 0, 100.);
-    subgrid.add_column (0, 0, 33.);
-    subgrid.add_column (0, 0, 33.);
-    subgrid.add_column (0, 0, 34.);
-    subgrid.add_block ({ 0, 0, 1, 1 }, 1);
-    subgrid.add_block ({ 1, 0, 1, 1 }, 1);
-    subgrid.add_block ({ 2, 0, 1, 1 }, 1);
-    subgrid.is_exclusive = false;
-
-    grid.add_row (0, 0, 50.0);
-    grid.add_row (0, 0, 25.0);
-    grid.add_row (3, 666, 0.0);
-    grid.add_row (1, 1, 0.0);
-    grid.add_column (0, 0, 33.0);
-    grid.add_column (0, 0, 17.0);
-    grid.add_column (0, 0, 50.0);
-    grid.is_exclusive = true;
-
-    auto c = maxy::control::Container {};
-    auto func_menu = new ::Wenv::Apps::FuncMenu { c, L"MAIN MENU" };
-
-    grid.add_block ({ 0, 0, 2, 1 }, 1);
-    grid.add_block ({ 2, 0, 1, 1 }, 0);
-    grid.add_block ({ 0, 1, 1, 2 }, 2, &subgrid);
-    grid.add_block ({ 1, 1, 2, 1 }, 1);
-    grid.add_block ({ 1, 2, 2, 1 }, 2);
-    grid.add_block ({ 0, 3, 3, 1 }, -1, nullptr, func_menu);
-
     // Char buffer to hold boundary texts
     std::vector<std::vector<wchar_t>> buffer (height, std::vector<wchar_t> (width + 1, L' '));
 
-    grid.bake ({ 0, 0, (int) width, (int) height }, buffer);
+    grid->bake ({ 0, 0, (int) width, (int) height }, buffer);
 
-    draw_grid (grid);
+    draw_grid (*grid);
 }
 
 void Display::draw_grid (::Wenv::Layout::Grid &grid)
 {
     for (auto &b : grid.blocks)
     {
-        draw_block (b);
+        draw_block_boundary (b);
         if (b.grid != nullptr)
         {
+            // If the block has nested grid, recurse
             draw_grid (*b.grid);
         }
         else if (b.app != nullptr)
         {
-            // todo: modify container dimensions to client area
-            b.app->draw (*this, b.container_dimensions);
+            // Otherwise if the block has an attached app, ask the app to draw its contents
+            b.app->draw (*this, b.get_client_dimensions ());
         }
     }
 }

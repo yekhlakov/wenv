@@ -47,7 +47,6 @@ Window::Window(HINSTANCE hInstance, std::wstring title, std::wstring className):
 	font_name {L"Consolas"},
 	char_width {0},
 	char_height {32},
-	current_display {new Display()},
 	current_palette {new Palette()},
 	hFont {NULL}
 {
@@ -72,6 +71,9 @@ Window::Window(HINSTANCE hInstance, std::wstring title, std::wstring className):
         CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, nullptr, nullptr, hInstance, this);
 
     if (hwnd) {
+
+        initialize ();
+
         hdc = GetDC(hwnd);
 
 	    set_font (font_name);
@@ -79,6 +81,10 @@ Window::Window(HINSTANCE hInstance, std::wstring title, std::wstring className):
         monospace_fonts = GetMonospaceFonts(hdc);
         ShowWindow(hwnd, SW_SHOW);
         UpdateWindow(hwnd);
+
+        RECT client_rect;
+        GetClientRect (hwnd, &client_rect);
+        SendMessage (hwnd, WM_SIZE, SIZE_RESTORED, MAKELPARAM (client_rect.right - client_rect.left, client_rect.bottom - client_rect.top));
     }
 }
 
@@ -94,7 +100,7 @@ Window::~Window()
         ReleaseDC (hwnd, hdc);
     }
 
-    delete current_display;
+    current_display = nullptr;
 }
 
 LRESULT CALLBACK Window::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -275,16 +281,22 @@ void Window::handle_resize (WPARAM wParam, LPARAM lParam)
     int width_px = LOWORD (lParam);
     int height_px = HIWORD (lParam);
 
-	int width_chars = width_px / char_width;
-	int height_chars = height_px / char_height;
+	container_width = width_px / char_width;
+	container_height = height_px / char_height;
 
-	if (width_chars > 0 && height_chars > 0)
+	if (container_width > 0 && container_height > 0 && current_display != nullptr)
     {
-		current_display->resize(static_cast<size_t>(width_chars), static_cast<size_t>(height_chars));
+		current_display->resize(static_cast<size_t>(container_width), static_cast<size_t>(container_height));
 	}
 }
 
 void Window::draw (HDC hdc) {
+
+    if (current_display == nullptr)
+    {
+        return;
+    }
+
     HFONT hOldFont = (HFONT) SelectObject (hdc, hFont);
 
     SetBkMode (hdc, OPAQUE);

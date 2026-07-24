@@ -34,6 +34,8 @@ struct Block : public Dimensions
 	std::wstring left_boundary;
 	std::wstring right_boundary;
 	std::wstring bottom_boundary;
+
+	Dimensions get_client_dimensions () const;
 };
 
 struct Grid

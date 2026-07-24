@@ -158,6 +158,7 @@
     <ClCompile Include="apps\FuncMenu.cpp" />
     <ClCompile Include="display\Display-Output.cpp" />
     <ClCompile Include="display\Palette.cpp" />
+    <ClCompile Include="display\Window-Init.cpp" />
     <ClCompile Include="layout\Grid.cpp" />
     <ClCompile Include="layout\Layout.cpp" />
     <ClCompile Include="maxy\strings.cpp" />

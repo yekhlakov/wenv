@@ -31,6 +31,69 @@ void Display::print_line (size_t pos, size_t ln, const std::wstring & s)
 	}
 }
 
+void Display::print_line (Rect container, const std::wstring &s, int flags)
+{
+	int l = (int) s.size ();
+	int dw = (int) data[0].size ();
+	int dh = (int) data.size ();
+
+	if
+		(
+			container.width < 1 || container.height < 1 ||
+			container.x > dw ||
+			container.y > dh ||
+			container.x + container.width < 0 ||
+			container.y + container.height < 0 ||
+			l == 0
+		)
+	{
+		// Container is either collapsed or totally outside the display, or the line is empty - do nothing
+		return;
+	}
+
+	// Compute the line position
+	int x =
+		(flags & PF_CENTER)
+		? container.x + (container.width - l) / 2
+		: (flags & PF_RIGHT)
+		? container.x + container.width - l - 1
+		: container.x;
+
+	int y =
+		(flags & PF_VCENTER)
+		? container.y + container.height / 2
+		: (flags & PF_BOTTOM)
+		? container.y + container.height - 1
+		: container.y;
+
+	if (flags & PF_ERASE_BACKGROUND)
+	{
+		for (auto cy = std::max (0, container.y); cy < std::min (dh, container.y + container.height); cy++)
+		{
+			for (auto cx = std::max (0, container.x); cx < std::min (dw, container.x + container.width); cx++)
+			{
+				if (cy == y && cx == x)
+				{
+					// Skip the whole line
+					cx += l - 1;
+					continue;
+				}
+
+				print_char (cx, cy, L' ');
+			}
+		}
+	}
+
+	if (x < - l || y < 0 || x >= dw || y >= dh)
+	{
+		// The line is completely outside the display - do nothing
+		return;
+	}
+
+	print_line (x, y, s);
+}
+
+
 // Print line top to bottom starting from specified position
 void Display::print_line_v (size_t pos, size_t ln, const std::wstring & s)
 {
@@ -49,8 +112,14 @@ void Display::print_line_v (size_t pos, size_t ln, const std::wstring & s)
 	}
 }
 
-void Display::draw_block (::Wenv::Layout::Block &b)
+void Display::draw_block_boundary (::Wenv::Layout::Block &b)
 {
+	if (b.btype < 0)
+	{
+		// Borderless blocks
+		return;
+	}
+
 	print_line (b.container_dimensions.x, b.container_dimensions.y, b.top_boundary);
 	print_line_v (b.container_dimensions.x, b.container_dimensions.y + 1, b.left_boundary);
 	print_line_v (b.container_dimensions.x + b.container_dimensions.width - 1, b.container_dimensions.y + 1, b.right_boundary);
