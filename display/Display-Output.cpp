@@ -1,9 +1,32 @@
 #include "Display.h"
+#include "Palette.h"
 #include "../maxy/strings.h"
 #include "../layout/Grid.h"
 
+
 namespace Wenv::Display
 {
+
+Display *Display::with_palette (Palette *p)
+{
+	current_palette = p;
+
+	return this;
+}
+
+Display *Display::with_color (const std::string &n)
+{
+	if (current_palette != nullptr)
+	{
+		auto e = current_palette->get_entry (n);
+
+		current_palette_color = -1;
+		current_foreground_color = e.foreground_color;
+		current_background_color = e.background_color;
+	}
+
+	return this;
+}
 
 // Print character to specified position
 void Display::print_char (size_t pos, size_t ln, wchar_t ch)
@@ -66,11 +89,15 @@ void Display::print_line (Rect container, const std::wstring &s, int flags)
 		? container.y + container.height - 1
 		: container.y;
 
+
+	auto container_begin_x = std::max (0, container.x);
+	auto container_end_x = std::min (dw, container.x + container.width);
+
 	if (flags & PF_ERASE_BACKGROUND)
 	{
 		for (auto cy = std::max (0, container.y); cy < std::min (dh, container.y + container.height); cy++)
 		{
-			for (auto cx = std::max (0, container.x); cx < std::min (dw, container.x + container.width); cx++)
+			for (auto cx = container_begin_x; cx < container_end_x; cx++)
 			{
 				if (cy == y && cx == x)
 				{
@@ -90,7 +117,22 @@ void Display::print_line (Rect container, const std::wstring &s, int flags)
 		return;
 	}
 
-	print_line (x, y, s);
+	int begin_s = 0, end_s = s.size ();
+
+	if (x < container_begin_x)
+	{
+		begin_s = container_begin_x - x;
+	}
+
+	if (x + l >= container_end_x)
+	{
+		end_s = container_end_x - x;
+	}
+
+	if (begin_s < end_s)
+	{
+		print_line (x + begin_s, y, std::wstring (s, begin_s, end_s));
+	}
 }
 
 

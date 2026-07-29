@@ -140,7 +140,9 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="apps\App.h" />
+    <ClInclude Include="apps\Context.h" />
     <ClInclude Include="apps\FuncMenu.h" />
+    <ClInclude Include="apps\FileList.h" />
     <ClInclude Include="display\Palette.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="layout\Grid.h" />
@@ -155,10 +157,12 @@
     <ClInclude Include="display\Window.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="apps\FileList.cpp" />
     <ClCompile Include="apps\FuncMenu.cpp" />
     <ClCompile Include="display\Display-Output.cpp" />
     <ClCompile Include="display\Palette.cpp" />
     <ClCompile Include="display\Window-Init.cpp" />
+    <ClCompile Include="display\Window-Input.cpp" />
     <ClCompile Include="layout\Grid.cpp" />
     <ClCompile Include="layout\Layout.cpp" />
     <ClCompile Include="maxy\strings.cpp" />

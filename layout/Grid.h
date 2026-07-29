@@ -5,6 +5,7 @@
 
 namespace Wenv::Apps {
 class App;
+class Context;
 }
 
 namespace Wenv::Layout {
@@ -54,6 +55,9 @@ struct Grid
 	std::vector<Block> blocks;
 
 	std::vector<std::vector<wchar_t>> boundary_elements;
+
+	// The context for all apps in this grid
+	::Wenv::Apps::Context *context = nullptr;
 
 	// Is the grid exclusive (== do the blocks have their own `exclusive` boundary or they share their boundaries)
 	bool is_exclusive;

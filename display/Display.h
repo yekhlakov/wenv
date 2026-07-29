@@ -5,13 +5,6 @@
 #include "Character.h"
 #include "..\Types.h"
 
-namespace Wenv::Layout
-{
-struct Layout;
-struct Grid;
-struct Block;
-}
-
 namespace Wenv::Display {
 
 struct Display
@@ -28,17 +21,30 @@ struct Display
 
     std::vector<std::vector<Character>> data;
 
+	std::wstring name;
+
+	Palette *current_palette = nullptr;
     int current_palette_color = 0;
     int current_foreground_color = 0;
     int current_background_color = 0;
 
 	::Wenv::Layout::Grid * grid = nullptr;
+	std::vector<::Wenv::Apps::App *> all_apps;
+	std::vector<::Wenv::Apps::App *> listening_apps;
+	::Wenv::Apps::App *focused_app = nullptr;
 
+	::Wenv::Apps::App *add_app (::Wenv::Apps::App *a);
+
+
+	Display (const std::wstring &n);
 	~Display ();
 
     // Resize the display
     void resize (size_t width, size_t height);
 
+
+	Display *with_palette (Palette *p);
+	Display *with_color (const std::string &n);
 
 	// OUTPUT
 

@@ -4,6 +4,10 @@
 #include <string>
 #include <vector>
 
+namespace Wenv::Layout {
+struct Grid;
+}
+
 namespace Wenv::Display {
 
 struct Display;
@@ -23,8 +27,15 @@ struct Window {
     int container_height;
 
     std::vector<Display *> displays;
+    std::vector<::Wenv::Layout::Grid *> grids;
+
     Display* current_display;
     Palette* current_palette;
+
+    // Input state
+    bool key_state[256];
+    int mouse_x = 0;
+    int mouse_y = 0;
 
     HFONT hFont;
     std::vector<std::wstring> monospace_fonts;
@@ -35,9 +46,16 @@ struct Window {
     // Create displays, grids, apps etc
     void initialize ();
 
-    void set_font(std::wstring name);
+    void set_font (std::wstring name);
+    void set_display (int n);
+
+    // Window message handlers
     void handle_resizing (WPARAM wParam, LPARAM lParam);
     void handle_resize (WPARAM wParam, LPARAM lParam);
+    void handle_keydown (WPARAM wParam, LPARAM lParam);
+    void handle_keyup (WPARAM wParam, LPARAM lParam);
+    void handle_mousemove (WPARAM wParam, LPARAM lParam);
+
     void draw(HDC hdc);
 
     static LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);

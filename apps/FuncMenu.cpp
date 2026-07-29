@@ -15,7 +15,7 @@ void FuncMenu::draw (::Wenv::Display::Display & display, ::Wenv::Display::Rect c
 	);
 }
 
-void FuncMenu::click (::Wenv::Display::Rect client_area)
+void FuncMenu::click (::Wenv::Display::Rect client_area, int modifiers)
 {
 }
 

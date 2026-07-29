@@ -6,6 +6,12 @@
 namespace Wenv::Display
 {
 
+Display::Display (const std::wstring &n) :
+    name { n }
+{
+   
+}
+
 Display::~Display ()
 {
     if (grid != nullptr)
@@ -60,7 +66,8 @@ void Display::draw_grid (::Wenv::Layout::Grid &grid)
         else if (b.app != nullptr)
         {
             // Otherwise if the block has an attached app, ask the app to draw its contents
-            b.app->draw (*this, b.get_client_dimensions ());
+            b.app->with_context(grid.context)
+                ->draw (*this, b.get_client_dimensions ());
         }
     }
 }
@@ -73,5 +80,16 @@ void Display::set_color (int pc, int fg, int bg)
 	current_background_color = bg;
 }
 
+
+::Wenv::Apps::App *Display::add_app (::Wenv::Apps::App *a)
+{
+    all_apps.push_back (a);
+    if (a->wants_all_keypresses ())
+    {
+        listening_apps.push_back (a);
+    }
+
+    return a;
+}
 
 } // namespace Wenv::Display

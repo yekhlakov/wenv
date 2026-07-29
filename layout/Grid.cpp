@@ -3,6 +3,7 @@
 #include "Grid.h"
 #include "../maxy/strings.h"
 
+
 namespace Wenv::Layout {
 
 void Grid::add_row (int min_size, int max_size, float percent_size)
@@ -483,8 +484,8 @@ Dimensions Block::get_client_dimensions () const
 	{
 		container_dimensions.x + 1,
 		container_dimensions.y + 1,
-		container_dimensions.x + container_dimensions.width - 2,
-		container_dimensions.y + container_dimensions.height - 2,
+		container_dimensions.width - 2,
+		container_dimensions.height - 2,
 	};
 }
 

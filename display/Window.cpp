@@ -3,6 +3,7 @@
 #include "Palette.h"
 #include "Window.h"
 #include "../Resource.h"
+#include "../maxy/strings.h"
 
 namespace Wenv::Display {
 
@@ -88,6 +89,16 @@ Window::Window(HINSTANCE hInstance, std::wstring title, std::wstring className):
     }
 }
 
+void Window::set_display (int n)
+{
+    n = max (0, n);
+
+    current_display = displays[min (n, (int) displays.size () - 1)];
+
+    auto name = maxy::strings::utf8towchar("wenv — ") + current_display->name;
+    SetWindowText (hwnd, name.c_str ());
+}
+
 Window::~Window()
 {
     if (hFont)
@@ -158,20 +169,57 @@ LRESULT CALLBACK Window::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM 
         PostQuitMessage(0);
         break;
 
+    case WM_KEYDOWN:
+        pWindow->handle_keydown (wParam, lParam);
+        break;
+
+    case WM_KEYUP:
+        pWindow->handle_keyup (wParam, lParam);
+        break;
+
     case WM_SYSKEYDOWN:
 
         if (wParam == VK_F10)
         {
             // Shortcut to kill the application
             DestroyWindow (hWnd);
+            break;
         }
-        else if (wParam == VK_SHIFT)
+        
+        if (wParam == VK_SHIFT)
         {
             // Alt+Shift switches keyboard layout
             ActivateKeyboardLayout ((HKL) HKL_NEXT, 0);
         }
 
-        return 0; // Don't propagate syskeys to default window proc
+        pWindow->handle_keydown (wParam, 0);
+        break;
+
+    case WM_SYSKEYUP:
+        pWindow->handle_keyup (wParam, 0);
+        break;
+
+    case WM_LBUTTONDOWN:
+        pWindow->handle_keydown (VK_LBUTTON, 0);
+        break;
+    case WM_RBUTTONDOWN:
+        pWindow->handle_keydown (VK_RBUTTON, 0);
+        break;
+    case WM_MBUTTONDOWN:
+        pWindow->handle_keydown (VK_MBUTTON, 0);
+        break;
+    case WM_LBUTTONUP:
+        pWindow->handle_keyup (VK_LBUTTON, 0);
+        break;
+    case WM_RBUTTONUP:
+        pWindow->handle_keyup (VK_RBUTTON, 0);
+        break;
+    case WM_MBUTTONUP:
+        pWindow->handle_keyup (VK_MBUTTON, 0);
+        break;
+    case WM_MOUSEMOVE:
+        pWindow->handle_mousemove (wParam, lParam);
+        break;
 
     default:
         return DefWindowProc(hWnd, message, wParam, lParam);
@@ -286,7 +334,8 @@ void Window::handle_resize (WPARAM wParam, LPARAM lParam)
 
 	if (container_width > 0 && container_height > 0 && current_display != nullptr)
     {
-		current_display->resize(static_cast<size_t>(container_width), static_cast<size_t>(container_height));
+		current_display->with_palette(current_palette)
+            ->resize(static_cast<size_t>(container_width), static_cast<size_t>(container_height));
 	}
 }
 
@@ -356,57 +405,5 @@ void Window::draw (HDC hdc) {
 
     SelectObject (hdc, hOldFont);
 }
-
-
-/*
-RECT rect;
-GetClientRect(hwnd, &rect);
-rect.top = 0;
-rect.bottom = rect.top + 24;
-int size = 24;
-int cnt = 0;
-
-for (const std::wstring & fontName : monospace_fonts) {
-    COLORREF colors[] = {
-        RGB(0,0,0),
-        RGB(255,0,0),
-        RGB(0,255,0),
-        RGB(255,255,0),
-        RGB(0,0,255),
-        RGB(255,0,255),
-        RGB(0,255,255),
-        RGB(255,255,255),
-    };
-
-    HFONT hFont_loop = CreateFontW(
-        size,
-        0, 0, 0,
-        FW_NORMAL,
-        FALSE, FALSE, FALSE,
-        DEFAULT_CHARSET,
-        OUT_DEFAULT_PRECIS,
-        CLIP_DEFAULT_PRECIS,
-        DEFAULT_QUALITY,
-        FF_MODERN,
-        fontName.c_str());
-
-    if (hFont_loop) {
-        HFONT hOldFont_loop = (HFONT)SelectObject(hdc, hFont_loop);
-
-        SetTextColor(hdc, colors[cnt & 7]);
-        SetBkColor(hdc, colors[(cnt + 4) & 7]);
-        SetBkMode(hdc, OPAQUE);
-
-        DrawTextW(hdc, fontName.c_str(), -1, &rect, DT_VCENTER | DT_SINGLELINE);
-
-        SelectObject(hdc, hOldFont_loop);
-        DeleteObject(hFont_loop);
-    }
-
-    cnt++;
-    rect.top += 2 + size;
-    rect.bottom = rect.top + 4 + size;
-}
-*/
 
 } // namespace Wenv::Display

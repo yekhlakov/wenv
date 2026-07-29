@@ -23,5 +23,16 @@ Palette::Entry Palette::get_entry (size_t n)
 	return colors[n];
 }
 
+Palette::Entry Palette::get_entry (const std::string &n)
+{
+	size_t nn = 0;
+	if (named_colors.find (n) != named_colors.end ())
+	{
+		nn = named_colors[n];
+	}
+
+	return get_entry (nn);
+}
+
 } // namespace Wenv::Display
 
