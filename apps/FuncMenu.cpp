@@ -1,6 +1,8 @@
 #include <Windows.h>
 #include "../display/Display.h"
+#include "FileList.h"
 #include "FuncMenu.h"
+#include "Context.h"
 
 namespace Wenv::Apps
 {
@@ -21,6 +23,10 @@ void FuncMenu::click (::Wenv::Display::Rect client_area, int modifiers)
 
 void FuncMenu::keypress (int key, int modifiers)
 {
+	// handle global commands
+
+	// then propagate to focused app
+	//current_display->focused_app->keypress (key, modifiers);
 }
 
 }

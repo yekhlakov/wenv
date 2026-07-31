@@ -19,13 +19,13 @@ protected:
 
 	std::wstring name;
 
-	Context *current_context = nullptr;
-
 	::Wenv::Display::Display *current_display = nullptr;
 	::Wenv::Display::Rect current_client_area {};
 
 public:
 	App (const std::wstring &n) : name { n } {}
+
+	Context *current_context = nullptr;
 
 	// The app may require the core to forward all keypresses to it regardles of current focus
 	// (The modal boxes do not allow keypresses propagate to such apps)

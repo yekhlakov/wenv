@@ -79,7 +79,7 @@ void Display::print_line (Rect container, const std::wstring &s, int flags)
 		(flags & PF_CENTER)
 		? container.x + (container.width - l) / 2
 		: (flags & PF_RIGHT)
-		? container.x + container.width - l - 1
+		? container.x + container.width - l
 		: container.x;
 
 	int y =

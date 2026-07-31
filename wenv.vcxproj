@@ -143,6 +143,7 @@
     <ClInclude Include="apps\Context.h" />
     <ClInclude Include="apps\FuncMenu.h" />
     <ClInclude Include="apps\FileList.h" />
+    <ClInclude Include="apps\FileInfoShort.h" />
     <ClInclude Include="display\Palette.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="layout\Grid.h" />
@@ -157,6 +158,7 @@
     <ClInclude Include="display\Window.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="apps\FileInfoShort.cpp" />
     <ClCompile Include="apps\FileList.cpp" />
     <ClCompile Include="apps\FuncMenu.cpp" />
     <ClCompile Include="display\Display-Output.cpp" />

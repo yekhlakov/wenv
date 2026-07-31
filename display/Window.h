@@ -2,6 +2,7 @@
 
 #include <windows.h>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace Wenv::Layout {
@@ -27,7 +28,7 @@ struct Window {
     int container_height;
 
     std::vector<Display *> displays;
-    std::vector<::Wenv::Layout::Grid *> grids;
+    std::unordered_map<std::string, ::Wenv::Layout::Grid *> grids;
 
     Display* current_display;
     Palette* current_palette;
@@ -57,6 +58,8 @@ struct Window {
     void handle_mousemove (WPARAM wParam, LPARAM lParam);
 
     void draw(HDC hdc);
+
+    ::Wenv::Layout::Grid *get_grid (const std::string &n);
 
     static LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 };

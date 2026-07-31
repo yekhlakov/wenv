@@ -63,6 +63,9 @@
     <ClInclude Include="apps\FileList.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
+    <ClInclude Include="apps\FileInfoShort.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="wenv.cpp">
@@ -105,6 +108,9 @@
       <Filter>Исходные файлы</Filter>
     </ClCompile>
     <ClCompile Include="display\Window-Input.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="apps\FileInfoShort.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
   </ItemGroup>

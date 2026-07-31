@@ -34,6 +34,11 @@ public:
 		return a;
 	}
 
+	void erase (const std::string &n)
+	{
+		stored.erase (n);
+	}
+
 	template<typename A>
 	A *get (const std::string &n, std::function<A *(void)> default_value_getter = [] () { return nullptr; })
 	{

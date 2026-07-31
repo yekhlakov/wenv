@@ -12,7 +12,21 @@ void Window::handle_keydown (WPARAM wParam, LPARAM lParam)
 
 	if (current_display->focused_app != nullptr)
 	{
-		current_display->focused_app->keypress (wParam, lParam);
+		int mods = 0;
+
+		if (key_state[VK_CONTROL])
+		{
+			mods |= 1;
+		}
+		if (key_state[VK_SHIFT])
+		{
+			mods |= 2;
+		}
+		if (key_state[VK_MENU])
+		{
+			mods |= 4;
+		}
+		current_display->focused_app->keypress (wParam, mods);
 	}
 	draw (hdc);
 }

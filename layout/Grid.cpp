@@ -422,7 +422,7 @@ void Grid::bake (Dimensions container_dimensions, std::vector<std::vector<wchar_
 
 	for (auto &b : blocks)
 	{
-		if (b.btype == 0)
+		if (b.btype <= 0)
 		{
 			// The block has no visible boundary
 			continue;

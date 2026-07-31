@@ -10,7 +10,6 @@ Palette::Entry::Entry (int fg, int bg):
 
 Palette::Palette ()
 {
-	colors.push_back ({}); // at least one palette entry must be set
 }
 
 Palette::Entry Palette::get_entry (size_t n)
@@ -18,6 +17,11 @@ Palette::Entry Palette::get_entry (size_t n)
 	if (n >= colors.size ())
 	{
 		n = 0;
+	}
+
+	if (colors.size () == 0)
+	{
+		return {};
 	}
 
 	return colors[n];
