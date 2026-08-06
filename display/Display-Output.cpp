@@ -117,7 +117,7 @@ void Display::print_line (Rect container, const std::wstring &s, int flags)
 		return;
 	}
 
-	int begin_s = 0, end_s = s.size ();
+	int begin_s = 0, end_s = (int) s.size ();
 
 	if (x < container_begin_x)
 	{
@@ -154,7 +154,7 @@ void Display::print_line_v (size_t pos, size_t ln, const std::wstring & s)
 	}
 }
 
-void Display::draw_block_boundary (::Wenv::Layout::Block &b)
+void Display::draw_block_boundary (::Wenv::Layout::Block &b, const std::string & path)
 {
 	if (b.btype < 0)
 	{
@@ -162,10 +162,10 @@ void Display::draw_block_boundary (::Wenv::Layout::Block &b)
 		return;
 	}
 
-	print_line (b.container_dimensions.x, b.container_dimensions.y, b.top_boundary);
-	print_line_v (b.container_dimensions.x, b.container_dimensions.y + 1, b.left_boundary);
-	print_line_v (b.container_dimensions.x + b.container_dimensions.width - 1, b.container_dimensions.y + 1, b.right_boundary);
-	print_line (b.container_dimensions.x, b.container_dimensions.y + b.container_dimensions.height - 1, b.bottom_boundary);
+	print_line (b.instances[path].container_dimensions.x, b.instances[path].container_dimensions.y, b.instances[path].top_boundary);
+	print_line_v (b.instances[path].container_dimensions.x, b.instances[path].container_dimensions.y + 1, b.instances[path].left_boundary);
+	print_line_v (b.instances[path].container_dimensions.x + b.instances[path].container_dimensions.width - 1, b.instances[path].container_dimensions.y + 1, b.instances[path].right_boundary);
+	print_line (b.instances[path].container_dimensions.x, b.instances[path].container_dimensions.y + b.instances[path].container_dimensions.height - 1, b.instances[path].bottom_boundary);
 }
 
 // Draw rectangular box with constant border

@@ -1,7 +1,9 @@
+#include <format>
+#include <random>
 #include "Display.h"
 #include "../Layout/Grid.h"
-#include <random>
 #include "../apps/FuncMenu.h"
+#include "../apps/Context.h"
 
 namespace Wenv::Display
 {
@@ -48,26 +50,36 @@ void Display::resize (size_t width, size_t height)
     // Char buffer to hold boundary texts
     std::vector<std::vector<wchar_t>> buffer (height, std::vector<wchar_t> (width + 1, L' '));
 
-    grid->bake ({ 0, 0, (int) width, (int) height }, buffer);
+    grid->bake ({ 0, 0, (int) width, (int) height }, buffer, "root");
 
-    draw_grid (*grid);
+    draw_grid (*grid, "root");
 }
 
-void Display::draw_grid (::Wenv::Layout::Grid &grid)
+void Display::draw_grid (::Wenv::Layout::Grid &grid, std::string path, ::Wenv::Apps::Context * ctx)
 {
+    // First draw all boundaries
+    int bnum = 0;
     for (auto &b : grid.blocks)
     {
-        draw_block_boundary (b);
+        auto bpath = std::format ("{}.{}", path, bnum++);
+        draw_block_boundary (b, bpath);
         if (b.grid != nullptr)
         {
             // If the block has nested grid, recurse
-            draw_grid (*b.grid);
+            draw_grid (*b.grid, bpath, b.get_context (ctx));
         }
-        else if (b.app != nullptr)
+    }
+    
+    // Then draw app conents because the conent may overwrite some boundaries
+    bnum = 0;
+    for (auto &b : grid.blocks)
+    {
+        auto bpath = std::format ("{}.{}", path, bnum++);
+        if (b.app != nullptr)
         {
             // Otherwise if the block has an attached app, ask the app to draw its contents
-            b.app->with_context(grid.context)
-                ->draw (*this, b.get_client_dimensions ());
+            b.app->with_context (b.get_context (ctx))
+                ->draw (*this, bpath, b.get_client_dimensions (bpath));
         }
     }
 }
@@ -90,6 +102,24 @@ void Display::set_color (int pc, int fg, int bg)
     }
 
     return a;
+}
+
+
+::Wenv::Apps::Context *Display::add_context (::Wenv::Apps::Context *c)
+{
+    contexts[c->get_name ()] = c;
+
+    return c;
+}
+
+::Wenv::Apps::Context * Display::get_context (const std::string & n)
+{
+    if (contexts.find (n) == contexts.end ())
+    {
+        return nullptr;
+    }
+
+    return contexts[n];
 }
 
 } // namespace Wenv::Display

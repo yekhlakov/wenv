@@ -2,6 +2,7 @@
 #include "Window.h"
 #include "Display.h"
 #include "../apps/App.h"
+#include "../apps/Context.h"
 
 namespace Wenv::Display
 {
@@ -10,7 +11,9 @@ void Window::handle_keydown (WPARAM wParam, LPARAM lParam)
 {
 	key_state[wParam] = true;
 
-	if (current_display->focused_app != nullptr)
+	auto focused_app = current_display->focused_context->get<::Wenv::Apps::App> ("focused-app");
+
+	if (focused_app != nullptr)
 	{
 		int mods = 0;
 
@@ -26,7 +29,7 @@ void Window::handle_keydown (WPARAM wParam, LPARAM lParam)
 		{
 			mods |= 4;
 		}
-		current_display->focused_app->keypress (wParam, mods);
+		focused_app->with_context (current_display->focused_context)->keypress (wParam, mods);
 	}
 	draw (hdc);
 }

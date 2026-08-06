@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <unordered_map>
 #include "../Types.h"
 
 namespace Wenv::Apps
@@ -20,7 +21,7 @@ protected:
 	std::wstring name;
 
 	::Wenv::Display::Display *current_display = nullptr;
-	::Wenv::Display::Rect current_client_area {};
+	std::unordered_map<std::string, ::Wenv::Display::Rect> client_areas;
 
 public:
 	App (const std::wstring &n) : name { n } {}
@@ -35,14 +36,14 @@ public:
 	virtual App *with_context (Context *c) { current_context = c; return this; }
 
 	// The core calls this function when it requires the app to redraw its contents
-	virtual void draw (::Wenv::Display::Display & display, ::Wenv::Display::Rect client_area)
+	virtual void draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area)
 	{
 		current_display = &display;
-		current_client_area = client_area;
+		client_areas[path] = client_area;
 	}
 
 	// The function to redraw the app (when it itself decides to do so)
-	virtual void redraw () {}
+	virtual void redraw (const std::string &path) {}
 
 	// The core calls this function when the app gets focus (from another app)
 	virtual void focus () {}
@@ -55,6 +56,8 @@ public:
 
 	// The core calls this function when the user presses a key AND the app is in focus
 	virtual void keypress (int key, int modifiers) {}
+
+	virtual ::Wenv::Display::Rect get_client_area (const std::string &path);
 };
 
 

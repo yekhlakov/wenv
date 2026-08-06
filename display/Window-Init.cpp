@@ -4,10 +4,14 @@
 #include "../layout/Grid.h"
 #include "../maxy/control/container.h"
 #include "../apps/Context.h"
-#include "../apps/FileList.h"
-#include "../apps/FileInfoShort.h"
 #include "../apps/FuncMenu.h"
 
+#include "../apps/FileManager/FileList.h"
+#include "../apps/FileManager/FileListHeader.h"
+#include "../apps/FileManager/FileInfoShort.h"
+
+#include "../apps/FileEditor/FileEditor.h"
+#include "../apps/FileEditor/FileEditorStatusBar.h"
 
 namespace Wenv::Display
 {
@@ -42,80 +46,104 @@ void Window::initialize ()
     current_palette->named_colors.insert ({ Palette::Highlight_color, 1 });
     current_palette->named_colors.insert ({ Palette::Active_element_color, 2 });
 
+
+    auto func_menu = new ::Wenv::Apps::FuncMenu { L"MAIN MENU" };
+
+    //--------------------------------------------------------------------------------------
     // File manager display
-    auto d = new Display { L"File manager" };
-
-    auto grid = new ::Wenv::Layout::Grid {};
-    grids.insert ({ "file-manager", grid });
-
-    d->grid = grid;
+    //--------------------------------------------------------------------------------------
 
     {
-        auto subgrid = new ::Wenv::Layout::Grid {};
-        grids.insert ({ "file-manager-left-panel", subgrid });
+        auto d = new Display { L"File manager" };
 
-        subgrid->add_row (3, 666, 0);
-        subgrid->add_row (3, 3, 0);
-        subgrid->add_column (0, 0, 50.);
-        subgrid->add_column (0, 0, 50.);
+        auto grid = new ::Wenv::Layout::Grid {};
+        grids.insert ({ "file-manager", grid });
 
-        subgrid->is_exclusive = false;
+        d->grid = grid;
 
-        subgrid->context = new ::Wenv::Apps::Context { "file-manager-left-panel" };
-        subgrid->context->set ("pwd", get_current_directory ());
+        auto left_context = d->add_context (new ::Wenv::Apps::Context { "file-manager-left-panel" });
+        left_context->set ("pwd", get_current_directory ());
+        auto right_context = d->add_context (new ::Wenv::Apps::Context { "file-manager-right-panel" });
+        right_context->set ("pwd", get_current_directory ());
+        d->focused_context = left_context;
 
-        auto c1 = d->add_app (new ::Wenv::Apps::FileList { L"1" });
-        auto c2 = d->add_app (new ::Wenv::Apps::FileList { L"2" });
-        auto c3 = d->add_app (new ::Wenv::Apps::FileInfoShort { L"i" });
+        auto medium_panel = new ::Wenv::Layout::Grid {};
+        {
+            grids.insert ({ "file-manager-medium-panel", medium_panel });
 
-        subgrid->context->set ("columns", new std::vector<::Wenv::Apps::App *> { c1, c2, c3 });
+            medium_panel->add_row (1, 1, 0);
+            medium_panel->add_row (3, 666, 0);
+            medium_panel->add_row (3, 3, 0);
+            medium_panel->add_column (0, 0, 50.);
+            medium_panel->add_column (0, 0, 50.);
 
-        d->focused_app = c1;
-        d->focused_app->focus ();
+            medium_panel->is_exclusive = false;
 
-        subgrid->add_block ({ 0, 0, 1, 1 }, 1, nullptr, c1);
-        subgrid->add_block ({ 1, 0, 1, 1 }, 1, nullptr, c2);
-        subgrid->add_block ({ 0, 1, 2, 1 }, 1, nullptr, c3);
+            auto c0 = d->add_app (new ::Wenv::Apps::FileListHeader { L"h" });
+            auto c1 = d->add_app (new ::Wenv::Apps::FileList { L"1" });
+            auto c2 = d->add_app (new ::Wenv::Apps::FileList { L"2" });
+            auto c3 = d->add_app (new ::Wenv::Apps::FileInfoShort { L"i" });
+            d->add_app (func_menu);
+
+            left_context->set ("app-group", new std::vector<::Wenv::Apps::App *> { c0, c1, c2, c3 });
+            right_context->set ("app-group", new std::vector<::Wenv::Apps::App *> { c0, c1, c2, c3 });
+            left_context->set ("focused-app", c1);
+            right_context->set ("focused-app", c1);
+            left_context->set ("focused-path", new std::string { "root.0.1" });
+            right_context->set ("focused-path", new std::string { "root.1.1" });
+
+            medium_panel->add_block ({ 0, 0, 2, 1 }, -1, nullptr, c0);
+            medium_panel->add_block ({ 0, 1, 1, 1 }, 1, nullptr, c1);
+            medium_panel->add_block ({ 1, 1, 1, 1 }, 1, nullptr, c2);
+            medium_panel->add_block ({ 0, 2, 2, 1 }, 1, nullptr, c3);
+        }
+
+        grid->add_row (0, 666, 0.0);
+        grid->add_row (1, 1, 0.0);
+        grid->add_column (0, 0, 50.0);
+        grid->add_column (0, 0, 50.0);
+        grid->is_exclusive = true;
+
+        grid->add_block ({ 0, 0, 1, 1 }, 2, medium_panel, nullptr, left_context);
+        grid->add_block ({ 1, 0, 1, 1 }, 2, medium_panel, nullptr, right_context);
+        grid->add_block ({ 0, 1, 2, 1 }, -1, nullptr, func_menu);
+
+        add_display("file-manager", d);
     }
 
+    //--------------------------------------------------------------------------------------
+    // File viewer/editor display
+    //--------------------------------------------------------------------------------------
     {
-        auto subgrid = new ::Wenv::Layout::Grid {};
-        grids.insert ({ "file-manager-right-panel", subgrid });
+        auto d = new Display { L"File Editor Viewer" };
 
-        subgrid->add_row (3, 666, 0);
-        subgrid->add_row (3, 3, 0);
-        subgrid->add_column (0, 0, 50.);
-        subgrid->add_column (0, 0, 50.);
+        auto grid = new ::Wenv::Layout::Grid {};
+        grids.insert ({ "file-editor-viewer", grid });
 
-        subgrid->is_exclusive = false;
+        grid->add_row (1, 1, 0.0);
+        grid->add_row (1, 666, 0.0);
+        grid->add_row (1, 1, 0.0);
+        grid->add_column (0, 0, 100.);
+        grid->is_exclusive = true;
 
-        subgrid->context = new ::Wenv::Apps::Context { "file-manager-right-panel" };
-        subgrid->context->set ("pwd", get_current_directory ());
+        auto status = d->add_app (new ::Wenv::Apps::FileEditorStatusBar { L"File Editor status" });
+        auto editor = d->add_app (new ::Wenv::Apps::FileEditor { L"File Editor" });
+        d->add_app (func_menu);
 
-        auto c1 = d->add_app (new ::Wenv::Apps::FileList { L"1" });
-        auto c2 = d->add_app (new ::Wenv::Apps::FileList { L"2" });
-        auto c3 = d->add_app (new ::Wenv::Apps::FileInfoShort { L"i" });
+        grid->add_block ({ 0,0,1,1 }, -1, nullptr, status);
+        grid->add_block ({ 0,1,1,1 }, -1, nullptr, editor);
+        grid->add_block ({ 0,2,1,1 }, -1, nullptr, func_menu);
+        grid->context = d->add_context (new ::Wenv::Apps::Context { "file-editor" });
+        d->focused_context = grid->context;
+        grid->context->set ("focused-app", editor);
+        grid->context->set ("app-group", new std::vector<::Wenv::Apps::App *> { status, editor, func_menu });
+        grid->context->set ("focused-path", "root.1");
 
-        subgrid->context->set ("columns", new std::vector<::Wenv::Apps::App *> { c1, c2, c3 });
+        d->grid = grid;
 
-        subgrid->add_block ({ 0, 0, 1, 1 }, 1, nullptr, c1);
-        subgrid->add_block ({ 1, 0, 1, 1 }, 1, nullptr, c2);
-        subgrid->add_block ({ 0, 1, 2, 1 }, 1, nullptr, c3);
+        add_display ("file-editor", d);
     }
 
-    grid->add_row (0, 666, 0.0);
-    grid->add_row (1, 1, 0.0);
-    grid->add_column (0, 0, 50.0);
-    grid->add_column (0, 0, 50.0);
-    grid->is_exclusive = true;
-
-    grid->add_block ({ 0, 0, 1, 1 }, 2, get_grid ("file-manager-left-panel"));
-    grid->add_block ({ 1, 0, 1, 1 }, 2, get_grid ("file-manager-right-panel"));
-    grid->add_block ({ 0, 1, 2, 1 }, -1, nullptr, d->add_app (new ::Wenv::Apps::FuncMenu { L"MAIN MENU" }));
-
-	displays.push_back (d);
-
-
-    set_display (0);
+    set_display ("file-manager");
 }
 }

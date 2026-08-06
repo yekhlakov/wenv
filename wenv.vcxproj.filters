@@ -60,10 +60,19 @@
     <ClInclude Include="apps\Context.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
-    <ClInclude Include="apps\FileList.h">
+    <ClInclude Include="apps\FileManager\FileList.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
-    <ClInclude Include="apps\FileInfoShort.h">
+    <ClInclude Include="apps\FileManager\FileInfoShort.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="apps\FileManager\FileListHeader.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="apps\FileEditor\FileEditorStatusBar.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="apps\FileEditor\FileEditor.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
   </ItemGroup>
@@ -104,13 +113,25 @@
     <ClCompile Include="display\Window-Init.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
-    <ClCompile Include="apps\FileList.cpp">
+    <ClCompile Include="apps\FileManager\FileList.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
     <ClCompile Include="display\Window-Input.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
-    <ClCompile Include="apps\FileInfoShort.cpp">
+    <ClCompile Include="apps\FileManager\FileInfoShort.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="apps\FileManager\FileListHeader.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="apps\App.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="apps\FileEditor\FileEditor.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="apps\FileEditor\FileEditorStatusBar.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
   </ItemGroup>
@@ -126,10 +147,5 @@
   </ItemGroup>
   <ItemGroup>
     <Manifest Include="app.manifest" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="apps\App.cpp">
-      <Filter>Исходные файлы</Filter>
-    </None>
   </ItemGroup>
 </Project>

@@ -27,7 +27,7 @@ struct Window {
     int container_width;
     int container_height;
 
-    std::vector<Display *> displays;
+    std::unordered_map<std::string, Display *> displays;
     std::unordered_map<std::string, ::Wenv::Layout::Grid *> grids;
 
     Display* current_display;
@@ -48,7 +48,9 @@ struct Window {
     void initialize ();
 
     void set_font (std::wstring name);
-    void set_display (int n);
+    void add_display (const std::string &n, Display *d);
+    void set_display (const std::string & n);
+    Display *get_display (const std::string &n);
 
     // Window message handlers
     void handle_resizing (WPARAM wParam, LPARAM lParam);

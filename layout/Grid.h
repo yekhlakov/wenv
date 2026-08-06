@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <unordered_map>
 #include "../Types.h"
 
 namespace Wenv::Apps {
@@ -13,6 +14,18 @@ namespace Wenv::Layout {
 using Dimensions = ::Wenv::Display::Rect;
 
 struct Grid;
+
+struct Block_instance
+{
+	Dimensions container_dimensions;
+
+	std::wstring top_boundary;
+	std::wstring left_boundary;
+	std::wstring right_boundary;
+	std::wstring bottom_boundary;
+
+	std::string path;
+};
 
 // The visible cell of the grid. A block occupies a rectangle of n*m contiguous cells
 struct Block : public Dimensions
@@ -29,14 +42,18 @@ struct Block : public Dimensions
 	// Attached app
 	::Wenv::Apps::App *app = nullptr;
 
-	Dimensions container_dimensions;
+	// Context for the whole block (or app)
+	::Wenv::Apps::Context *context = nullptr;
 
-	std::wstring top_boundary;
-	std::wstring left_boundary;
-	std::wstring right_boundary;
-	std::wstring bottom_boundary;
+	std::unordered_map<std::string, Block_instance> instances;
 
-	Dimensions get_client_dimensions () const;
+	Dimensions get_client_dimensions (const std::string & path);
+	std::wstring &get_top_boundary (const std::string &path);
+	std::wstring &get_left_boundary (const std::string &path);
+	std::wstring &get_bottom_boundary (const std::string &path);
+	std::wstring &get_right_boundary (const std::string &path);
+
+	::Wenv::Apps::Context *get_context (::Wenv::Apps::Context *dflt);
 };
 
 struct Grid
@@ -67,9 +84,16 @@ struct Grid
 	// Add underlying grid column
 	void add_column (int min_size, int max_size, float percent_size);
 	// Add grid block (possibly occupying more than one underlying cell)
-	void add_block (Dimensions grid_block_dimensions, int btype, Grid *nested_grid = nullptr, ::Wenv::Apps::App * app = nullptr);
+	void add_block
+	(
+		Dimensions grid_block_dimensions, 
+		int btype, 
+		Grid *nested_grid = nullptr, 
+		::Wenv::Apps::App * app = nullptr,
+		::Wenv::Apps::Context * context = nullptr
+	);
 	// Bake the grid (compute dimensions and boundary strings for all its blocks)
-	void bake (Dimensions container_dimensions, std::vector<std::vector<wchar_t>> & buffer);
+	void bake (Dimensions container_dimensions, std::vector<std::vector<wchar_t>> & buffer, std::string path);
 
 
 	// Calculate gross sizes for each underlying cell

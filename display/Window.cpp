@@ -89,14 +89,43 @@ Window::Window(HINSTANCE hInstance, std::wstring title, std::wstring className):
     }
 }
 
-void Window::set_display (int n)
+void Window::add_display (const std::string &n, Display *d)
 {
-    n = max (0, n);
+    displays[n] = d;
+    d->window = this;
+}
 
-    current_display = displays[min (n, (int) displays.size () - 1)];
+void Window::set_display (const std::string &n)
+{
+    Display *d = get_display (n);
+
+    if (d == current_display)
+    {
+        return;
+    }
+
+    current_display = d;
 
     auto name = maxy::strings::utf8towchar("wenv — ") + current_display->name;
+
     SetWindowText (hwnd, name.c_str ());
+
+    if (container_width > 0 && container_height > 0)
+    {
+        current_display->with_palette (current_palette)
+            ->resize (static_cast<size_t>(container_width), static_cast<size_t>(container_height));
+    }
+}
+
+Display *Window::get_display (const std::string &n)
+{
+    if (displays.find (n) == displays.end ()) {
+        return displays.begin ()->second;
+    }
+    else
+    {
+        return displays[n];
+    }
 }
 
 Window::~Window()

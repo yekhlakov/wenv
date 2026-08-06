@@ -1,11 +1,14 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include "Character.h"
 #include "..\Types.h"
 
 namespace Wenv::Display {
+
+struct Window;
 
 struct Display
 {
@@ -31,10 +34,16 @@ struct Display
 	::Wenv::Layout::Grid * grid = nullptr;
 	std::vector<::Wenv::Apps::App *> all_apps;
 	std::vector<::Wenv::Apps::App *> listening_apps;
+	std::unordered_map<std::string, ::Wenv::Apps::Context *> contexts;
+
 	::Wenv::Apps::App *focused_app = nullptr;
+	::Wenv::Apps::Context *focused_context = nullptr;
 
 	::Wenv::Apps::App *add_app (::Wenv::Apps::App *a);
+	::Wenv::Apps::Context * add_context (::Wenv::Apps::Context *c);
+	::Wenv::Apps::Context *get_context (const std::string &n);
 
+	Window *window = nullptr;
 
 	Display (const std::wstring &n);
 	~Display ();
@@ -64,10 +73,10 @@ struct Display
 	void print_line_v (size_t pos, size_t ln, const std::wstring & s);
 
 	// Draw a grid (recursively)
-	void draw_grid (::Wenv::Layout::Grid &grid);
+	void draw_grid (::Wenv::Layout::Grid &grid, std::string path, ::Wenv::Apps::Context *ctx = nullptr);
 
 	// Draw a grid block (using its boundary strings)
-	void draw_block_boundary (::Wenv::Layout::Block &b);
+	void draw_block_boundary (::Wenv::Layout::Block &b, const std::string &path);
 
 	// Draw rectangular box with constant border
 	void draw_box (size_t pos, size_t ln, size_t w, size_t h, int btype);

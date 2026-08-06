@@ -1,11 +1,12 @@
 #include <algorithm>
 #include <Shlwapi.h>
 #include <Windows.h>
-#include "../maxy/strings.h"
-#include "../display/Display.h"
-#include "../display/Palette.h"
+#include "../../maxy/strings.h"
+#include "../../display/Display.h"
+#include "../../display/Palette.h"
+#include "../../display/Window.h"
 #include "FileList.h"
-#include "Context.h"
+#include "../Context.h"
 
 #pragma comment(lib, "shlwapi.lib")
 
@@ -113,38 +114,52 @@ int *get_selected_file_idx (Context * c)
 	return c->get<int> ("selected-file-idx", [] () ->int *{ return new int { 0 }; });
 }
 
-void FileList::draw (::Wenv::Display::Display &display, ::Wenv::Display::Rect client_area)
+void FileList::draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area)
 {
-	App::draw (display, client_area);
+	App::draw (display, path, client_area);
 
 	if (current_context == nullptr)
 	{
 		return;
 	}
 
-	redraw ();
+	redraw (path);
 }
 
-void FileList::redraw()
+void FileList::redraw(const std::string &path)
 {
 	auto s = current_context->get<std::wstring> ("pwd");
 	auto sort_mode = current_context->get<int> ("sort-mode", [] () { return new int { 0 }; });
 	auto lst = current_context->get<File_list_type> ("list", [&] () {return list_directory_contents (*s); });
 	auto sorted_lst = current_context->get<File_list_type> ("sorted-list", [&] () {return sort_file_list (lst, *sort_mode); });
 	auto selected_file_idx = get_selected_file_idx (current_context);
+	auto current_client_area = get_client_area (path);
+	auto list_offset = current_context->get<int> ("list-offset", [] () { return new int { 0 }; });
 
 	*selected_file_idx = min ((int) sorted_lst->size () - 1, *selected_file_idx);
 	*selected_file_idx = max (0, *selected_file_idx);
+
+	auto list_size = current_client_area.height;
+
+	if (*selected_file_idx < *list_offset)
+	{
+		// The cursor moved outside of viewable area, so shift it
+		*list_offset = *selected_file_idx;
+	}
+	else if (*selected_file_idx >= *list_offset + 2 * list_size)
+	{
+		*list_offset = *selected_file_idx - 2 * list_size + 1;
+	}
 
 	::Wenv::Display::Rect fn_rect = current_client_area;
 	fn_rect.height = 1;
 
 	int p = 0;
-	int p_begin = 0;
+	int p_begin = *list_offset;
 	if (name[0] == L'2')
 	{
 		// This is the right column so we must skip some of the first elements
-		p_begin = current_client_area.height;
+		p_begin += list_size;
 	}
 
 	for (auto &fd : *sorted_lst)
@@ -155,7 +170,7 @@ void FileList::redraw()
 			continue;
 		}
 
-		if (p == *selected_file_idx)
+		if (p == *selected_file_idx && current_display->focused_context == current_context)
 		{
 			current_display->with_color (::Wenv::Display::Palette::Highlight_color);
 		}
@@ -188,6 +203,8 @@ void FileList::redraw()
 		p = p_begin;
 	}
 
+	current_display->with_color (::Wenv::Display::Palette::Default_color);
+
 	// Clear the remains
 	while (p - p_begin < current_client_area.height)
 	{
@@ -211,6 +228,9 @@ void FileList::keypress (int key, int modifiers)
 {
 	auto idx = get_selected_file_idx (current_context);
 	auto lst = current_context->get<File_list_type> ("sorted-list");
+	auto path = *current_context->get<std::string> ("focused-path");
+
+	auto list_size = client_areas[path].height;
 
 	if (modifiers & 1) // control
 	{
@@ -235,11 +255,11 @@ void FileList::keypress (int key, int modifiers)
 	}
 	else if (key == VK_RIGHT)
 	{
-		(*idx) += current_client_area.height;
+		(*idx) += list_size;
 	}
 	else if (key == VK_LEFT)
 	{
-		*idx = max (0, (*idx) - current_client_area.height);
+		*idx = max (0, (*idx) - list_size);
 	}
 	else if (key == VK_RETURN)
 	{
@@ -271,19 +291,48 @@ void FileList::keypress (int key, int modifiers)
 	else if (key == VK_TAB)
 	{
 		// Switch panel focus
+		auto n = current_context->get_name ();
+		std::string target_context { "file-manager-left-panel" };
+		if (n == target_context)
+		{
+			target_context = "file-manager-right-panel";
+		}
+
+		current_display->focused_context = nullptr;
+		redraw_all (path);
+		current_display->focused_context = current_display->get_context (target_context);
+		with_context (current_display->focused_context);
+		redraw_all (*current_display->focused_context->get<std::string>("focused-path"));
+		return;
+	}
+	else if (key == VK_F3 || key == VK_F4)
+	{
+		// Show editor/viewer if this is not a directory
+		if (!((*lst)[*idx].dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+		{
+			auto ed = current_display->window->get_display ("file-editor");
+			auto ctx = ed->get_context ("file-editor");
+			auto edit_mode = ctx->get<int> ("edit-mode", [] () {return new int {}; });
+			*edit_mode = key == VK_F4 ? 1 : 0;
+			auto edit_target = ctx->get<std::wstring> ("edit-target", [] () { return new std::wstring {}; });
+			*edit_target = (*lst)[*idx].cFileName;
+
+			current_display->window->set_display ("file-editor");
+			return;
+		}
 	}
 
-	redraw_all ();
+	redraw_all (path);
 }
 
-void FileList::redraw_all ()
+void FileList::redraw_all (const std::string & path)
 {
-	auto cols = current_context->get<std::vector<App *>> ("columns");
-	if (cols != nullptr)
+	auto apps = current_context->get<std::vector<App *>> ("app-group");
+	if (apps != nullptr)
 	{
-		for (auto app : *cols)
+		for (auto app : *apps)
 		{
-			app->redraw ();
+			app->with_context(current_context)->redraw (path);
 		}
 	}
 }

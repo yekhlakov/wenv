@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <format>
 #include <unordered_map>
 #include "Grid.h"
 #include "../maxy/strings.h"
@@ -246,19 +247,22 @@ Dimensions Grid::calculate_block_dimensions (
 	return result;
 }
 
-void Grid::add_block (Dimensions grid_block_dimensions, int btype, Grid * nested_grid, ::Wenv::Apps::App * app)
+void Grid::add_block (Dimensions grid_block_dimensions, int btype, Grid * nested_grid, ::Wenv::Apps::App * app, ::Wenv::Apps::Context *context)
 {
-	blocks.push_back ({ grid_block_dimensions, btype, nested_grid, app });
+	blocks.push_back ({ grid_block_dimensions, btype, nested_grid, app, context });
 }
 
-void Grid::bake (Dimensions container_dimensions, std::vector<std::vector<wchar_t>> & buffer)
+void Grid::bake (Dimensions container_dimensions, std::vector<std::vector<wchar_t>> & buffer, std::string path)
 {
 	auto cols = calculate_gross_sizes (column_constraints, (int) container_dimensions.width);
 	auto rows = calculate_gross_sizes (row_constraints, (int) container_dimensions.height);
 
+	auto bnum = 0;
 	for (auto &b : blocks)
 	{
-		b.container_dimensions = calculate_block_dimensions (container_dimensions, b, rows, cols);
+		auto bpath = std::format ("{}.{}", path, bnum++);
+		// Todo: store dimensions per-path
+		b.instances[bpath].container_dimensions = calculate_block_dimensions (container_dimensions, b, rows, cols);
 	}
 
 	auto u = [] (const char *p)->wchar_t { return maxy::strings::utf8towchar (p)[0]; };
@@ -420,8 +424,11 @@ void Grid::bake (Dimensions container_dimensions, std::vector<std::vector<wchar_
 		buffer[y][x] = mix_chars (ch, prev);
 	};
 
+	bnum = 0;
 	for (auto &b : blocks)
 	{
+		auto bpath = std::format ("{}.{}", path, bnum++);
+
 		if (b.btype <= 0)
 		{
 			// The block has no visible boundary
@@ -429,65 +436,115 @@ void Grid::bake (Dimensions container_dimensions, std::vector<std::vector<wchar_
 		}
 
 		// Corners
-		put_char (element_base[b.btype][2][0], b.container_dimensions.x, b.container_dimensions.y);
-		put_char (element_base[b.btype][3][0], b.container_dimensions.x + b.container_dimensions.width - 1, b.container_dimensions.y);
-		put_char (element_base[b.btype][4][0], b.container_dimensions.x, b.container_dimensions.y + b.container_dimensions.height - 1);
-		put_char (element_base[b.btype][5][0], b.container_dimensions.x + b.container_dimensions.width - 1, b.container_dimensions.y + b.container_dimensions.height - 1);
+		put_char (element_base[b.btype][2][0], b.instances[bpath].container_dimensions.x, b.instances[bpath].container_dimensions.y);
+		put_char (element_base[b.btype][3][0], b.instances[bpath].container_dimensions.x + b.instances[bpath].container_dimensions.width - 1, b.instances[bpath].container_dimensions.y);
+		put_char (element_base[b.btype][4][0], b.instances[bpath].container_dimensions.x, b.instances[bpath].container_dimensions.y + b.instances[bpath].container_dimensions.height - 1);
+		put_char (element_base[b.btype][5][0], b.instances[bpath].container_dimensions.x + b.instances[bpath].container_dimensions.width - 1, b.instances[bpath].container_dimensions.y + b.instances[bpath].container_dimensions.height - 1);
 		
 		// Edges
-		for (auto x = 1; x < b.container_dimensions.width - 1; x++)
+		for (auto x = 1; x < b.instances[bpath].container_dimensions.width - 1; x++)
 		{
-			put_char (element_base[b.btype][0][0], b.container_dimensions.x + x, b.container_dimensions.y);
-			put_char (element_base[b.btype][0][0], b.container_dimensions.x + x, b.container_dimensions.y + b.container_dimensions.height - 1);
+			put_char (element_base[b.btype][0][0], b.instances[bpath].container_dimensions.x + x, b.instances[bpath].container_dimensions.y);
+			put_char (element_base[b.btype][0][0], b.instances[bpath].container_dimensions.x + x, b.instances[bpath].container_dimensions.y + b.instances[bpath].container_dimensions.height - 1);
 		}
 
-		for (auto y = 1; y < b.container_dimensions.height - 1; y++)
+		for (auto y = 1; y < b.instances[bpath].container_dimensions.height - 1; y++)
 		{
-			put_char (element_base[b.btype][1][0], b.container_dimensions.x, b.container_dimensions.y + y);
-			put_char (element_base[b.btype][1][0], b.container_dimensions.x + b.container_dimensions.width - 1, b.container_dimensions.y + y);
+			put_char (element_base[b.btype][1][0], b.instances[bpath].container_dimensions.x, b.instances[bpath].container_dimensions.y + y);
+			put_char (element_base[b.btype][1][0], b.instances[bpath].container_dimensions.x + b.instances[bpath].container_dimensions.width - 1, b.instances[bpath].container_dimensions.y + y);
 		}
 	}
 
 	// Process nested grids
+	bnum = 0;
 	for (auto &b : blocks)
 	{
+		auto bpath = std::format ("{}.{}", path, bnum++);
 		if (b.grid != nullptr)
 		{
-			b.grid->bake (b.container_dimensions, buffer);
+			b.grid->bake (b.instances[bpath].container_dimensions, buffer, bpath);
 		}
 	}
 
+	bnum = 0;
 	for (auto &b : blocks)
 	{
-		// Extract edge strings
-		b.top_boundary = { &buffer[b.container_dimensions.y][b.container_dimensions.x], &buffer[b.container_dimensions.y][b.container_dimensions.x + b.container_dimensions.width] };
-		b.bottom_boundary = { &buffer[b.container_dimensions.y + b.container_dimensions.height - 1][b.container_dimensions.x], &buffer[b.container_dimensions.y + b.container_dimensions.height - 1][b.container_dimensions.x + b.container_dimensions.width] };
+		auto bpath = std::format ("{}.{}", path, bnum++);
 
-		b.left_boundary = L"";
-		b.right_boundary = L"";
-		for (auto y = 1; y < b.container_dimensions.height - 1; y++)
+		// Extract edge strings
+		b.instances[bpath].top_boundary =
 		{
-			b.left_boundary.push_back (buffer[b.container_dimensions.y + y][b.container_dimensions.x]);
-			b.right_boundary.push_back (buffer[b.container_dimensions.y + y][b.container_dimensions.x + b.container_dimensions.width - 1]);
+			&buffer[b.instances[bpath].container_dimensions.y][b.instances[bpath].container_dimensions.x], 
+			&buffer[b.instances[bpath].container_dimensions.y][b.instances[bpath].container_dimensions.x + b.instances[bpath].container_dimensions.width] 
+		};
+		b.instances[bpath].bottom_boundary =
+		{
+			&buffer[b.instances[bpath].container_dimensions.y + b.instances[bpath].container_dimensions.height - 1][b.instances[bpath].container_dimensions.x], 
+			&buffer[b.instances[bpath].container_dimensions.y + b.instances[bpath].container_dimensions.height - 1][b.instances[bpath].container_dimensions.x + b.instances[bpath].container_dimensions.width] 
+		};
+
+		b.instances[bpath].left_boundary = L"";
+		b.instances[bpath].right_boundary = L"";
+		for (auto y = 1; y < b.instances[bpath].container_dimensions.height - 1; y++)
+		{
+			b.instances[bpath].left_boundary.push_back (buffer[b.instances[bpath].container_dimensions.y + y][b.instances[bpath].container_dimensions.x]);
+			b.instances[bpath].right_boundary.push_back (buffer[b.instances[bpath].container_dimensions.y + y][b.instances[bpath].container_dimensions.x + b.instances[bpath].container_dimensions.width - 1]);
 		}
 	}
 }
 
-Dimensions Block::get_client_dimensions () const
+Dimensions Block::get_client_dimensions (const std::string & path)
 {
+	auto instance = instances[path];
+
 	if (btype < 0)
 	{
-		return container_dimensions;
+		return instance.container_dimensions;
 	}
 
 	return Dimensions
 	{
-		container_dimensions.x + 1,
-		container_dimensions.y + 1,
-		container_dimensions.width - 2,
-		container_dimensions.height - 2,
+		instance.container_dimensions.x + 1,
+		instance.container_dimensions.y + 1,
+		instance.container_dimensions.width - 2,
+		instance.container_dimensions.height - 2,
 	};
 }
 
+std::wstring & Block::get_top_boundary (const std::string &path)
+{
+	return instances[path].top_boundary;
+}
+std::wstring & Block::get_left_boundary (const std::string &path)
+{
+	return instances[path].bottom_boundary;
+}
+std::wstring & Block::get_right_boundary (const std::string & path)
+{
+	return instances[path].right_boundary;
+}
+
+std::wstring & Block::get_bottom_boundary (const std::string & path)
+{
+	return instances[path].right_boundary;
+}
+
+::Wenv::Apps::Context *Block::get_context (::Wenv::Apps::Context *dflt)
+{
+	// Own context takes precendence
+	if (context != nullptr)
+	{
+		return context;
+	}
+
+	// Then check for grid context
+	if (grid != nullptr && grid->context != nullptr)
+	{
+		return grid->context;
+	}
+
+	// Then use the default
+	return dflt;
+}
 
 } // namespace Wenv::Layout

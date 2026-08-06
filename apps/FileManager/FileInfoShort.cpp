@@ -1,9 +1,9 @@
 #include <format>
 #include <vector>
 #include <Windows.h>
-#include "..\display\Display.h"
-#include "..\display\Palette.h"
-#include "Context.h"
+#include "../../display/Display.h"
+#include "../../display/Palette.h"
+#include "../Context.h"
 #include "FileInfoShort.h"
 
 namespace Wenv::Apps
@@ -12,20 +12,21 @@ namespace Wenv::Apps
 
 int *get_selected_file_idx (Context *c);
 
-void FileInfoShort::draw (::Wenv::Display::Display &display, ::Wenv::Display::Rect client_area)
+void FileInfoShort::draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area)
 {
-	App::draw (display, client_area);
+	App::draw (display, path, client_area);
 
 	if (current_context == nullptr)
 	{
 		return;
 	}
 
-	redraw ();
+	redraw (path);
 }
 
-void FileInfoShort::redraw ()
+void FileInfoShort::redraw (const std::string &path)
 {
+	auto current_client_area = get_client_area (path);
 	auto lst = current_context->get<std::vector<WIN32_FIND_DATAW>> ("sorted-list");
 	auto selected_file_idx = get_selected_file_idx (current_context);
 

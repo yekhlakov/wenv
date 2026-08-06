@@ -1,20 +1,20 @@
 #pragma once
-#include "App.h"
+#include "../App.h"
 
 namespace Wenv::Apps
 {
 
-class FuncMenu : public App
+class FileEditor : public App
 {
 public:
-	FuncMenu (const std::wstring &n) : App { n } {}
-
-	// Func menu wants all keypresses
-	virtual bool wants_all_keypresses () override { return true; }
+	FileEditor (const std::wstring &n) : App { n } {}
 
 	virtual void draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area) override;
+	virtual void redraw (const std::string &path) override;
 	virtual void click (::Wenv::Display::Rect client_area, int modifiers) override;
 	virtual void keypress (int key, int modifiers) override;
+
+	void redraw_all (const std::string &path);
 };
 
 }
