@@ -10,7 +10,7 @@ namespace Wenv::Apps
 {
 
 
-int *get_selected_file_idx (Context *c);
+int *get_selected_file_idx (Context *c, const std::wstring &dirname);
 
 void FileInfoShort::draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area)
 {
@@ -28,7 +28,8 @@ void FileInfoShort::redraw (const std::string &path)
 {
 	auto current_client_area = get_client_area (path);
 	auto lst = current_context->get<std::vector<WIN32_FIND_DATAW>> ("sorted-list");
-	auto selected_file_idx = get_selected_file_idx (current_context);
+	auto pwd = current_context->get<std::wstring> ("pwd");
+	auto selected_file_idx = get_selected_file_idx (current_context, *pwd);
 
 	auto fd = (*lst)[*selected_file_idx];
 

@@ -109,9 +109,9 @@ File_list_type * sort_file_list (File_list_type *v, int sort_mode)
 	return v;
 }
 
-int *get_selected_file_idx (Context * c)
+int *get_selected_file_idx (Context * c, const std::wstring &dirname)
 {
-	return c->get<int> ("selected-file-idx", [] () ->int *{ return new int { 0 }; });
+	return c->get<int> ("selected-file-idx " + maxy::strings::wchartoutf8 (dirname), [] () ->int *{ return new int { 0 }; });
 }
 
 void FileList::draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area)
@@ -132,7 +132,7 @@ void FileList::redraw(const std::string &path)
 	auto sort_mode = current_context->get<int> ("sort-mode", [] () { return new int { 0 }; });
 	auto lst = current_context->get<File_list_type> ("list", [&] () {return list_directory_contents (*s); });
 	auto sorted_lst = current_context->get<File_list_type> ("sorted-list", [&] () {return sort_file_list (lst, *sort_mode); });
-	auto selected_file_idx = get_selected_file_idx (current_context);
+	auto selected_file_idx = get_selected_file_idx (current_context, *s);
 	auto current_client_area = get_client_area (path);
 	auto list_offset = current_context->get<int> ("list-offset", [] () { return new int { 0 }; });
 
@@ -226,7 +226,8 @@ void FileList::click (::Wenv::Display::Rect client_area, int modifiers)
 
 void FileList::keypress (unsigned int key, int modifiers)
 {
-	auto idx = get_selected_file_idx (current_context);
+	auto pwd = current_context->get<std::wstring> ("pwd");
+	auto idx = get_selected_file_idx (current_context, *pwd);
 	auto lst = current_context->get<File_list_type> ("sorted-list");
 	auto path = *current_context->get<std::string> ("focused-path");
 
@@ -266,11 +267,14 @@ void FileList::keypress (unsigned int key, int modifiers)
 		if ((*lst)[*idx].dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
 		{
 			// change current directory
-			auto pwd = current_context->get<std::wstring> ("pwd");
 			auto next = std::wstring { (*lst)[*idx].cFileName };
 
 			if (next == L"..")
 			{
+				// Forget the selected file of the directory we are leaving,
+				// so when we come back we start from zero
+				current_context->erase ("selected-file-idx " + maxy::strings::wchartoutf8 (*pwd));
+
 				// go up
 				*pwd += L"\\..";
 				wchar_t buf[2000];
@@ -283,7 +287,6 @@ void FileList::keypress (unsigned int key, int modifiers)
 				*pwd += L"\\" + next;
 
 			}
-			*idx = 0;
 			current_context->erase ("list");
 			current_context->erase ("sorted-list");
 		}
