@@ -23,7 +23,7 @@ namespace Wenv::Apps
 		// Dummy implementation for click event
 	}
 
-	void FileEditor::keypress (int key, int modifiers)
+	void FileEditor::keypress (unsigned int key, int modifiers)
 	{
 		// Dummy implementation for keypress event
 	}

@@ -20,7 +20,7 @@ void FuncMenu::click (::Wenv::Display::Rect client_area, int modifiers)
 {
 }
 
-void FuncMenu::keypress (int key, int modifiers)
+void FuncMenu::keypress (unsigned int key, int modifiers)
 {
 	// handle global commands
 

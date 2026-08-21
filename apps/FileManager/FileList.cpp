@@ -224,7 +224,7 @@ void FileList::click (::Wenv::Display::Rect client_area, int modifiers)
 {
 }
 
-void FileList::keypress (int key, int modifiers)
+void FileList::keypress (unsigned int key, int modifiers)
 {
 	auto idx = get_selected_file_idx (current_context);
 	auto lst = current_context->get<File_list_type> ("sorted-list");

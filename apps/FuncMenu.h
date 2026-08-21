@@ -14,7 +14,7 @@ public:
 
 	virtual void draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area) override;
 	virtual void click (::Wenv::Display::Rect client_area, int modifiers) override;
-	virtual void keypress (int key, int modifiers) override;
+	virtual void keypress (unsigned int key, int modifiers) override;
 };
 
 }

@@ -55,7 +55,7 @@ public:
 	virtual void click (::Wenv::Display::Rect client_area, int modifiers) {}
 
 	// The core calls this function when the user presses a key AND the app is in focus
-	virtual void keypress (int key, int modifiers) {}
+	virtual void keypress (unsigned int key, int modifiers) {}
 
 	virtual ::Wenv::Display::Rect get_client_area (const std::string &path);
 };
