@@ -57,7 +57,13 @@ void Display::resize (size_t width, size_t height)
 
 void Display::draw_grid (::Wenv::Layout::Grid &grid, std::string path, ::Wenv::Apps::Context * ctx)
 {
-    // First draw all boundaries
+	// Fall back to the grid own context
+	if (ctx == nullptr)
+	{
+		ctx = grid.context;
+	}
+
+	// First draw all boundaries
     int bnum = 0;
     for (auto &b : grid.blocks)
     {

@@ -319,6 +319,8 @@ void FileList::keypress (unsigned int key, int modifiers)
 			*edit_mode = key == VK_F4 ? 1 : 0;
 			auto edit_target = ctx->get<std::wstring> ("edit-target", [] () { return new std::wstring {}; });
 			*edit_target = (*lst)[*idx].cFileName;
+			auto edit_pwd = ctx->get<std::wstring> ("edit-pwd", [] () { return new std::wstring {}; });
+			*edit_pwd = *current_context->get<std::wstring> ("pwd");
 
 			current_display->window->set_display ("file-editor");
 			return;

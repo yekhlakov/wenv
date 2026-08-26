@@ -137,7 +137,7 @@ void Window::initialize ()
         d->focused_context = grid->context;
         grid->context->set ("focused-app", editor);
         grid->context->set ("app-group", new std::vector<::Wenv::Apps::App *> { status, editor, func_menu });
-        grid->context->set ("focused-path", "root.1");
+        grid->context->set ("focused-path", new std::string { "root.1" });
 
         d->grid = grid;
 
