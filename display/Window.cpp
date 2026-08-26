@@ -95,6 +95,19 @@ void Window::add_display (const std::string &n, Display *d)
     d->window = this;
 }
 
+void Window::activate_current ()
+{
+    auto name = maxy::strings::utf8towchar("wenv — ") + current_display->name;
+
+    SetWindowText (hwnd, name.c_str ());
+
+    if (container_width > 0 && container_height > 0)
+    {
+        current_display->with_palette (current_palette)
+            ->resize (static_cast<size_t>(container_width), static_cast<size_t>(container_height));
+    }
+}
+
 void Window::set_display (const std::string &n)
 {
     Display *d = get_display (n);
@@ -106,15 +119,28 @@ void Window::set_display (const std::string &n)
 
     current_display = d;
 
-    auto name = maxy::strings::utf8towchar("wenv — ") + current_display->name;
+    display_stack.push_back (d);
 
-    SetWindowText (hwnd, name.c_str ());
+    activate_current ();
+}
 
-    if (container_width > 0 && container_height > 0)
+bool Window::pop_display ()
+{
+    if (!display_stack.empty ())
     {
-        current_display->with_palette (current_palette)
-            ->resize (static_cast<size_t>(container_width), static_cast<size_t>(container_height));
+        display_stack.pop_back ();
     }
+
+    if (display_stack.empty ())
+    {
+        return false;
+    }
+
+    current_display = display_stack.back ();
+
+    activate_current ();
+
+    return true;
 }
 
 Display *Window::get_display (const std::string &n)
@@ -211,7 +237,15 @@ LRESULT CALLBACK Window::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM 
         if (wParam == VK_F10)
         {
             // Shortcut to kill the application
-            DestroyWindow (hWnd);
+            if (!pWindow->pop_display ())
+            {
+                DestroyWindow (hWnd);
+            }
+            else
+            {
+                pWindow->draw (pWindow->hdc);
+            }
+
             break;
         }
         

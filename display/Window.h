@@ -30,6 +30,8 @@ struct Window {
     std::unordered_map<std::string, Display *> displays;
     std::unordered_map<std::string, ::Wenv::Layout::Grid *> grids;
 
+    std::vector<Display *> display_stack;
+
     Display* current_display;
     Palette* current_palette;
 
@@ -50,6 +52,7 @@ struct Window {
     void set_font (std::wstring name);
     void add_display (const std::string &n, Display *d);
     void set_display (const std::string & n);
+    bool pop_display ();
     Display *get_display (const std::string &n);
 
     // Window message handlers
@@ -58,6 +61,8 @@ struct Window {
     void handle_keydown (WPARAM wParam, LPARAM lParam);
     void handle_keyup (WPARAM wParam, LPARAM lParam);
     void handle_mousemove (WPARAM wParam, LPARAM lParam);
+
+    void activate_current ();
 
     void draw(HDC hdc);
 
