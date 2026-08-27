@@ -34,7 +34,7 @@ static std::wstring expand_tabs (const std::wstring &line)
 	return out;
 }
 
-static bool load_file_lines (const std::wstring &path, std::vector<std::wstring> *lines)
+static bool load_file_lines (const std::wstring &path, std::vector<std::wstring> *lines, size_t *file_size)
 {
 	auto h = CreateFileW (path.c_str (), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
 
@@ -64,6 +64,8 @@ static bool load_file_lines (const std::wstring &path, std::vector<std::wstring>
 	}
 
 	raw.resize (read);
+
+	*file_size = read;
 
 	// Skip the utf8 BOM if it is there
 	if (raw.size () >= 3 && (unsigned char) raw[0] == 0xEF && (unsigned char) raw[1] == 0xBB && (unsigned char) raw[2] == 0xBF)
@@ -130,10 +132,12 @@ void FileEditor::redraw (const std::string &path)
 	{
 		// A different file was requested - forget the old content and offsets
 		content = new std::vector<std::wstring> {};
-		load_file_lines (full_path, content);
+		size_t file_size { 0 };
+		load_file_lines (full_path, content, &file_size);
 
 		current_context->set ("content", content);
 		current_context->set ("viewed-path", new std::wstring { full_path });
+		current_context->set ("file-size", new size_t { file_size });
 
 		current_context->erase ("top-line");
 		current_context->erase ("left-col");

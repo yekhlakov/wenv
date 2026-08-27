@@ -34,6 +34,7 @@ void FileEditorStatusBar::redraw (const std::string &path)
 	auto content = current_context->get<std::vector<std::wstring>> ("content");
 	auto top = current_context->get<int> ("top-line", [] () { return new int {}; });
 	auto left = current_context->get<int> ("left-col", [] () { return new int {}; });
+	auto file_size = current_context->get<size_t> ("file-size", [] () { return new size_t {}; });
 
 	if (target == nullptr || pwd == nullptr)
 	{
@@ -55,7 +56,7 @@ void FileEditorStatusBar::redraw (const std::string &path)
 		right = std::format
 		(
 			L"  {}  {}/{}  Col {}",
-			content->empty () ? L"0 B" : std::format (L"{} B", content->size ()),
+			std::format (L"{} B", *file_size),
 			line_num,
 			(int) content->size (),
 			*left + 1

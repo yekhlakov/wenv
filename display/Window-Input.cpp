@@ -11,6 +11,12 @@ void Window::handle_keydown (WPARAM wParam, LPARAM lParam)
 {
 	key_state[wParam] = true;
 
+	if (wParam == VK_ESCAPE && display_stack.size () > 1)
+	{
+		pop_display ();
+		return;
+	}
+
 	auto focused_app = current_display->focused_context->get<::Wenv::Apps::App> ("focused-app");
 
 	if (focused_app != nullptr)
