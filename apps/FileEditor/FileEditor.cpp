@@ -11,6 +11,29 @@ namespace Wenv::Apps
 {
 
 // Load the whole file splitting it into lines (no line wrapping)
+static std::wstring expand_tabs (const std::wstring &line)
+{
+	std::wstring out;
+	int col = 0;
+
+	for (auto ch : line)
+	{
+		if (ch == L'\t')
+		{
+			int spaces = 4 - (col % 4);
+			out.append (spaces, L' ');
+			col += spaces;
+		}
+		else
+		{
+			out += ch;
+			col++;
+		}
+	}
+
+	return out;
+}
+
 static bool load_file_lines (const std::wstring &path, std::vector<std::wstring> *lines)
 {
 	auto h = CreateFileW (path.c_str (), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -123,7 +146,7 @@ void FileEditor::redraw (const std::string &path)
 	size_t longest { 0 };
 	for (auto &l : *content)
 	{
-		longest = max (longest, l.size ());
+		longest = max (longest, expand_tabs (l).size ());
 	}
 
 	// Clamp the visible window to the content
@@ -143,7 +166,7 @@ void FileEditor::redraw (const std::string &path)
 		r.height = 1;
 
 		auto s = ln < (int) content->size ()
-			? (*content)[ln].substr ((size_t) *left)
+			? expand_tabs ((*content)[ln]).substr ((size_t) *left)
 			: std::wstring { L" " };
 
 		if (s.empty ())
