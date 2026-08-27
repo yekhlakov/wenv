@@ -181,6 +181,13 @@ void FileEditor::redraw (const std::string &path)
 			current_display->PF_TOP | current_display->PF_LEFT | current_display->PF_ERASE_BACKGROUND
 		);
 	}
+
+	// Update the status bar
+	auto status = current_context->get<::Wenv::Apps::App> ("status-bar");
+	if (status != nullptr)
+	{
+		status->with_context (current_context)->redraw (path);
+	}
 }
 
 void FileEditor::click (::Wenv::Display::Rect client_area, int modifiers)
