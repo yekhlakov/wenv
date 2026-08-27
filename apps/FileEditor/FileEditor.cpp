@@ -165,9 +165,13 @@ void FileEditor::redraw (const std::string &path)
 		r.y += row;
 		r.height = 1;
 
-		auto s = ln < (int) content->size ()
-			? expand_tabs ((*content)[ln]).substr ((size_t) *left)
-			: std::wstring { L" " };
+		auto expanded = ln < (int) content->size ()
+			? expand_tabs ((*content)[ln])
+			: std::wstring {};
+
+		auto s = *left < (int) expanded.size ()
+			? expanded.substr ((size_t) *left)
+			: std::wstring {};
 
 		if (s.empty ())
 		{
