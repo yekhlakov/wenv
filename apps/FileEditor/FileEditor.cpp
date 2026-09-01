@@ -73,8 +73,6 @@ void FileEditor::redraw (const std::string &path)
 	*left = min (*left, max (0, (int) file->longest_expanded - area.width));
 	*left = max (*left, 0);
 
-	current_display->with_color (::Wenv::Display::Palette::Default_color);
-
 	int ln = *top;
 	auto it = file->lines.begin ();
 	std::advance (it, min (*top, (int) file->lines.size ()));
@@ -84,6 +82,8 @@ void FileEditor::redraw (const std::string &path)
 		::Wenv::Display::Rect r = area;
 		r.y += row;
 		r.height = 1;
+
+		current_display->with_color (::Wenv::Display::Palette::Default_color);
 
 		std::wstring expanded;
 		if (ln < (int) file->lines.size ())
@@ -141,7 +141,7 @@ void FileEditor::redraw (const std::string &path)
 		if (truncated)
 		{
 			current_display->with_color (::Wenv::Display::Palette::Active_element_color);
-			current_display->print_char (area.x + area.width - 1, r.y, L'\u22EF');
+			current_display->print_char (area.x + area.width - 1, r.y, L'\u2026');
 		}
 	}
 
