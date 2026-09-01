@@ -141,6 +141,7 @@
   <ItemGroup>
     <ClInclude Include="apps\App.h" />
     <ClInclude Include="apps\Context.h" />
+    <ClInclude Include="apps\FileEditor\File.h" />
     <ClInclude Include="apps\FileEditor\FileEditor.h" />
     <ClInclude Include="apps\FileEditor\FileEditorStatusBar.h" />
     <ClInclude Include="apps\FileManager\FileListHeader.h" />
@@ -161,6 +162,7 @@
     <ClInclude Include="display\Window.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="apps\FileEditor\File.cpp" />
     <ClCompile Include="apps\FileEditor\FileEditor.cpp" />
     <ClCompile Include="apps\FileEditor\FileEditorStatusBar.cpp" />
     <ClCompile Include="apps\FileManager\FileInfoShort.cpp" />

@@ -17,7 +17,8 @@ A text-based working environment (file manager / viewer etc) inspired by classic
 │ └─/FileManager
 ├─/display	-- window management and displaying of information
 ├─/layout	-- abstract-ish handling of display layouts (grid-based layout design)
-└─/maxy		-- imported (library) components; not a part of this project; maintained elsewhere; must not modify these
+├─/maxy		-- imported (library) components; not a part of this project; maintained elsewhere; must not modify these
+└─/tmp		-- use this for temporary storage instead of system directories
 
 
 ## Development

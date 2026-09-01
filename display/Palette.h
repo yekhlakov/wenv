@@ -28,6 +28,7 @@ struct Palette
 	inline static const char *Default_color = "default";
 	inline static const char *Highlight_color = "highlight";
 	inline static const char *Active_element_color = "active";
+	inline static const char *Dark_element_color = "dark";
 };
 
 } // namespace Wenv::Display

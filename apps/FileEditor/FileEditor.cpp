@@ -1,98 +1,14 @@
 #include <Windows.h>
+#include <iterator>
 #include <string>
-#include <vector>
-#include "../../maxy/strings.h"
 #include "../../display/Display.h"
 #include "../../display/Palette.h"
 #include "../Context.h"
+#include "File.h"
 #include "FileEditor.h"
 
 namespace Wenv::Apps
 {
-
-// Load the whole file splitting it into lines (no line wrapping)
-static std::wstring expand_tabs (const std::wstring &line)
-{
-	std::wstring out;
-	int col = 0;
-
-	for (auto ch : line)
-	{
-		if (ch == L'\t')
-		{
-			int spaces = 4 - (col % 4);
-			out.append (spaces, L' ');
-			col += spaces;
-		}
-		else
-		{
-			out += ch;
-			col++;
-		}
-	}
-
-	return out;
-}
-
-static bool load_file_lines (const std::wstring &path, std::vector<std::wstring> *lines, size_t *file_size)
-{
-	auto h = CreateFileW (path.c_str (), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-
-	if (h == INVALID_HANDLE_VALUE)
-	{
-		return false;
-	}
-
-	LARGE_INTEGER size;
-
-	if (!GetFileSizeEx (h, &size))
-	{
-		CloseHandle (h);
-		return false;
-	}
-
-	std::string raw;
-	raw.resize ((size_t) size.QuadPart);
-
-	DWORD read { 0 };
-	auto ok = ReadFile (h, raw.data (), (DWORD) raw.size (), &read, nullptr);
-	CloseHandle (h);
-
-	if (!ok)
-	{
-		return false;
-	}
-
-	raw.resize (read);
-
-	*file_size = read;
-
-	// Skip the utf8 BOM if it is there
-	if (raw.size () >= 3 && (unsigned char) raw[0] == 0xEF && (unsigned char) raw[1] == 0xBB && (unsigned char) raw[2] == 0xBF)
-	{
-		raw.erase (0, 3);
-	}
-
-	std::string cur;
-
-	for (auto c : raw)
-	{
-		if (c == '\n')
-		{
-			lines->push_back (maxy::strings::utf8towchar (cur));
-			cur.clear ();
-		}
-		else if (c != '\r')
-		{
-			cur += c;
-		}
-	}
-
-	// The last line may have no trailing newline
-	lines->push_back (maxy::strings::utf8towchar (cur));
-
-	return true;
-}
 
 void FileEditor::draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area)
 {
@@ -125,19 +41,16 @@ void FileEditor::redraw (const std::string &path)
 
 	full_path += *target;
 
-	auto content = current_context->get<std::vector<std::wstring>> ("content");
+	auto file = current_context->get<File> ("file");
 	auto viewed_path = current_context->get<std::wstring> ("viewed-path");
 
-	if (content == nullptr || viewed_path == nullptr || *viewed_path != full_path)
+	if (file == nullptr || viewed_path == nullptr || *viewed_path != full_path)
 	{
-		// A different file was requested - forget the old content and offsets
-		content = new std::vector<std::wstring> {};
-		size_t file_size { 0 };
-		load_file_lines (full_path, content, &file_size);
+		// A different file was requested - load it
+		file = new File { full_path };
 
-		current_context->set ("content", content);
+		current_context->set ("file", file);
 		current_context->set ("viewed-path", new std::wstring { full_path });
-		current_context->set ("file-size", new size_t { file_size });
 
 		current_context->erase ("top-line");
 		current_context->erase ("left-col");
@@ -147,39 +60,64 @@ void FileEditor::redraw (const std::string &path)
 	auto top = current_context->get<int> ("top-line", [] () { return new int {}; });
 	auto left = current_context->get<int> ("left-col", [] () { return new int {}; });
 
-	size_t longest { 0 };
-	for (auto &l : *content)
-	{
-		longest = max (longest, expand_tabs (l).size ());
-	}
+	// Load more data if the viewport is near the end of loaded content
+	file->ensure_loaded (*top, area.height);
 
 	// Clamp the visible window to the content
-	*top = min (*top, max (0, (int) content->size () - area.height));
+	auto line_count = file->get_line_count ();
+	if (line_count != UNKNOWN_LINE_COUNT)
+	{
+		*top = min (*top, max (0, line_count - area.height));
+	}
 	*top = max (*top, 0);
-	*left = min (*left, max (0, (int) longest - area.width));
+	*left = min (*left, max (0, (int) file->longest_expanded - area.width));
 	*left = max (*left, 0);
 
 	current_display->with_color (::Wenv::Display::Palette::Default_color);
 
+	int ln = *top;
+	auto it = file->lines.begin ();
+	std::advance (it, min (*top, (int) file->lines.size ()));
+
 	for (int row = 0; row < area.height; row++)
 	{
-		auto ln = *top + row;
-
 		::Wenv::Display::Rect r = area;
 		r.y += row;
 		r.height = 1;
 
-		auto expanded = ln < (int) content->size ()
-			? expand_tabs ((*content)[ln])
-			: std::wstring {};
+		std::wstring expanded;
+		if (ln < (int) file->lines.size ())
+		{
+			expanded = expand_tabs (it->raw_data);
+			++it;
+		}
+
+		ln++;
 
 		auto s = *left < (int) expanded.size ()
 			? expanded.substr ((size_t) *left)
 			: std::wstring {};
 
+		// Replace tab-arrow markers with the actual symbol
+		for (auto &ch : s)
+		{
+			if (ch == L'\x01')
+			{
+				ch = L'\u2192';
+			}
+		}
+
+		// Truncate long lines and append a midline ellipsis
+		bool truncated = (int) s.size () > area.width && area.width > 1;
+		if (truncated)
+		{
+			s = s.substr (0, (size_t) area.width - 1) + L'\u22EF';
+		}
+
 		if (s.empty ())
 		{
 			s = L" ";
+			truncated = false;
 		}
 
 		current_display->print_line
@@ -188,6 +126,23 @@ void FileEditor::redraw (const std::string &path)
 			s,
 			current_display->PF_TOP | current_display->PF_LEFT | current_display->PF_ERASE_BACKGROUND
 		);
+
+		// Colorize tab arrows with the dark palette color
+		current_display->with_color (::Wenv::Display::Palette::Dark_element_color);
+		for (size_t i = 0; i < s.size (); i++)
+		{
+			if (s[i] == L'\u2192')
+			{
+				current_display->print_char (area.x + (int) i, r.y, L'\u2192');
+			}
+		}
+
+		// Colorize the truncation ellipsis with the active palette color
+		if (truncated)
+		{
+			current_display->with_color (::Wenv::Display::Palette::Active_element_color);
+			current_display->print_char (area.x + area.width - 1, r.y, L'\u22EF');
+		}
 	}
 
 	// Update the status bar

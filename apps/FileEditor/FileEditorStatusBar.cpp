@@ -4,6 +4,7 @@
 #include "../../display/Display.h"
 #include "../../display/Palette.h"
 #include "../Context.h"
+#include "File.h"
 #include "FileEditorStatusBar.h"
 
 namespace Wenv::Apps
@@ -31,10 +32,9 @@ void FileEditorStatusBar::redraw (const std::string &path)
 	auto area = get_client_area (path);
 	auto target = current_context->get<std::wstring> ("edit-target");
 	auto pwd = current_context->get<std::wstring> ("edit-pwd");
-	auto content = current_context->get<std::vector<std::wstring>> ("content");
+	auto file = current_context->get<File> ("file");
 	auto top = current_context->get<int> ("top-line", [] () { return new int {}; });
 	auto left = current_context->get<int> ("left-col", [] () { return new int {}; });
-	auto file_size = current_context->get<size_t> ("file-size", [] () { return new size_t {}; });
 
 	if (target == nullptr || pwd == nullptr)
 	{
@@ -50,17 +50,33 @@ void FileEditorStatusBar::redraw (const std::string &path)
 
 	// Right-aligned information
 	std::wstring right;
-	if (content != nullptr)
+	if (file != nullptr)
 	{
-		auto line_num = min (*top + 1, (int) content->size ());
-		right = std::format
-		(
-			L"  {}  {}/{}  Col {}",
-			std::format (L"{} B", *file_size),
-			line_num,
-			(int) content->size (),
-			*left + 1
-		);
+		auto line_count = file->get_line_count ();
+		auto loaded_count = (int) file->lines.size ();
+		auto line_num = min (*top + 1, loaded_count);
+
+		if (line_count == UNKNOWN_LINE_COUNT)
+		{
+			right = std::format
+			(
+				L"  {}  {}/?  Col {}",
+				std::format (L"{} B", file->get_file_size ()),
+				line_num,
+				*left + 1
+			);
+		}
+		else
+		{
+			right = std::format
+			(
+				L"  {}  {}/{}  Col {}",
+				std::format (L"{} B", file->get_file_size ()),
+				line_num,
+				line_count,
+				*left + 1
+			);
+		}
 	}
 
 	current_display->with_color (::Wenv::Display::Palette::Highlight_color);
