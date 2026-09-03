@@ -157,12 +157,16 @@ void FileEditor::redraw (const std::string &path)
 			for (auto &[pos, len] : tab_spans)
 			{
 				int screen_x = pos - *left;
-				if (screen_x + len > 0 && screen_x < area.width)
+				int vis_start = max (0, screen_x);
+				int vis_end = min (area.width, screen_x + len);
+				int vis_width = vis_end - vis_start;
+
+				if (vis_width > 0)
 				{
 					::Wenv::Display::Rect tab_rect;
-					tab_rect.x = area.x + max (0, screen_x);
+					tab_rect.x = area.x + vis_start;
 					tab_rect.y = r.y;
-					tab_rect.width = min (len, area.width - max (0, screen_x));
+					tab_rect.width = vis_width;
 					tab_rect.height = 1;
 
 					current_display->print_line
