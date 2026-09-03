@@ -109,10 +109,6 @@ void FileEditor::redraw (const std::string &path)
 
 		// Truncate long lines and append a midline ellipsis
 		bool truncated = (int) s.size () > area.width && area.width > 1;
-		if (truncated)
-		{
-			s = s.substr (0, (size_t) area.width - 1) + L'\u22EF';
-		}
 
 		if (s.empty ())
 		{

@@ -40,8 +40,8 @@ void Window::initialize ()
     // Palette
     current_palette->colors.push_back ({ 0x000070aa, 0 }); // default
     current_palette->colors.push_back ({ 0, 0x000070aa }); // Highlight
-    current_palette->colors.push_back ({ 0x0000aaff, 0 }); // Active
-    current_palette->colors.push_back ({ 0x00003e66, 0 }); // Dark
+    current_palette->colors.push_back ({ 0x0030c0ff, 0 }); // Active
+    current_palette->colors.push_back ({ 0x00003060, 0 }); // Dark
 
     current_palette->named_colors.insert ({ Palette::Default_color, 0 });
     current_palette->named_colors.insert ({ Palette::Highlight_color, 1 });
