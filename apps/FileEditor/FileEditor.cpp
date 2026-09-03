@@ -118,10 +118,42 @@ void FileEditor::redraw (const std::string &path)
 			current_display->PF_TOP | current_display->PF_LEFT | current_display->PF_ERASE_BACKGROUND
 		);
 
+		bool drew_dark = false;
+
+		// Draw trailing spaces as middle dots
+		if (!expanded.empty ())
+		{
+			auto last_non_space = expanded.find_last_not_of (L' ');
+			if (last_non_space != std::wstring::npos)
+			{
+				int trailing_start = (int) last_non_space + 1;
+				int trailing_count = (int) expanded.size () - trailing_start;
+
+				if (trailing_count > 0)
+				{
+					current_display->with_color (::Wenv::Display::Palette::Dark_element_color);
+					drew_dark = true;
+
+					for (int i = 0; i < trailing_count; i++)
+					{
+						int screen_x = trailing_start + i - *left;
+						if (screen_x >= 0 && screen_x < area.width)
+						{
+							current_display->print_char (area.x + screen_x, r.y, L'\u00B7');
+						}
+					}
+				}
+			}
+		}
+
 		// Draw tab markers in a separate pass using stored spans
 		if (tab_spans.size() > 0)
 		{
-			current_display->with_color (::Wenv::Display::Palette::Dark_element_color);
+			if (!drew_dark)
+			{
+				current_display->with_color (::Wenv::Display::Palette::Dark_element_color);
+				drew_dark = true;
+			}
 			for (auto &[pos, len] : tab_spans)
 			{
 				int screen_x = pos - *left;
@@ -150,7 +182,7 @@ void FileEditor::redraw (const std::string &path)
 			current_display->print_char (area.x + area.width - 1, r.y, L'\u2026');
 		}
 
-		if (tab_spans.size() > 0 || truncated)
+		if (drew_dark || truncated)
 		{
 			// Return the default color if we've changed it to some other color previously
 			current_display->with_color (::Wenv::Display::Palette::Default_color);
