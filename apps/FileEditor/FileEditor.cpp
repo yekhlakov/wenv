@@ -1,6 +1,7 @@
 #include <Windows.h>
 #include <iterator>
 #include <string>
+#include <vector>
 #include "../../display/Display.h"
 #include "../../display/Palette.h"
 #include "../Context.h"
@@ -77,18 +78,22 @@ void FileEditor::redraw (const std::string &path)
 	auto it = file->lines.begin ();
 	std::advance (it, min (*top, (int) file->lines.size ()));
 
+	// Set the default color
+	current_display->with_color (::Wenv::Display::Palette::Default_color);
+
 	for (int row = 0; row < area.height; row++)
 	{
 		::Wenv::Display::Rect r = area;
 		r.y += row;
 		r.height = 1;
 
-		current_display->with_color (::Wenv::Display::Palette::Default_color);
-
 		std::wstring expanded;
+		std::vector<int> tab_positions;
 		if (ln < (int) file->lines.size ())
 		{
-			expanded = expand_tabs (it->raw_data);
+			auto result = expand_tabs (it->raw_data);
+			expanded = std::move (result.first);
+			tab_positions = std::move (result.second);
 			++it;
 		}
 
@@ -98,21 +103,11 @@ void FileEditor::redraw (const std::string &path)
 			? expanded.substr ((size_t) *left)
 			: std::wstring {};
 
-		// Replace tab-arrow markers with the actual symbol
-		for (auto &ch : s)
-		{
-			if (ch == L'\x01')
-			{
-				ch = L'\u2192';
-			}
-		}
-
-		// Truncate long lines and append a midline ellipsis
 		bool truncated = (int) s.size () > area.width && area.width > 1;
 
 		if (s.empty ())
 		{
-			s = L" ";
+			s = L"";
 			truncated = false;
 		}
 
@@ -123,13 +118,17 @@ void FileEditor::redraw (const std::string &path)
 			current_display->PF_TOP | current_display->PF_LEFT | current_display->PF_ERASE_BACKGROUND
 		);
 
-		// Colorize tab arrows with the dark palette color
-		current_display->with_color (::Wenv::Display::Palette::Dark_element_color);
-		for (size_t i = 0; i < s.size (); i++)
+		// Draw tab markers in a separate pass using stored positions
+		if (tab_positions.size() > 0)
 		{
-			if (s[i] == L'\u2192')
+			current_display->with_color (::Wenv::Display::Palette::Dark_element_color);
+			for (auto pos : tab_positions)
 			{
-				current_display->print_char (area.x + (int) i, r.y, L'\u2192');
+				int screen_x = pos - *left;
+				if (screen_x >= 0 && screen_x < area.width)
+				{
+					current_display->print_char (area.x + screen_x, r.y, L'\u2192');
+				}
 			}
 		}
 
@@ -138,6 +137,12 @@ void FileEditor::redraw (const std::string &path)
 		{
 			current_display->with_color (::Wenv::Display::Palette::Active_element_color);
 			current_display->print_char (area.x + area.width - 1, r.y, L'\u2026');
+		}
+
+		if (tab_positions.size() > 0 || truncated)
+		{
+			// Return the default color if we've changed it to some other color previously
+			current_display->with_color (::Wenv::Display::Palette::Default_color);
 		}
 	}
 

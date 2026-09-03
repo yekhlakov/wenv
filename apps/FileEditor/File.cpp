@@ -9,10 +9,11 @@ namespace Wenv::Apps
 
 static constexpr std::uint64_t ONE_MB = 1024 * 1024;
 
-std::wstring expand_tabs (const std::string &line)
+std::pair<std::wstring, std::vector<int>> expand_tabs (const std::string &line)
 {
 	auto wide = maxy::strings::utf8towchar (line);
 	std::wstring out;
+	std::vector<int> tab_positions;
 	int col = 0;
 
 	for (auto ch : wide)
@@ -21,7 +22,7 @@ std::wstring expand_tabs (const std::string &line)
 		{
 			int spaces = 4 - (col % 4);
 			out.append (spaces, L' ');
-			out.back () = L'\x01';
+			tab_positions.push_back ((int) out.size () - 1);
 			col += spaces;
 		}
 		else
@@ -31,7 +32,7 @@ std::wstring expand_tabs (const std::string &line)
 		}
 	}
 
-	return out;
+	return { out, tab_positions };
 }
 
 File::File (const std::wstring &file_path)
@@ -118,7 +119,7 @@ File::File (const std::wstring &file_path)
 	// Determine the longest expanded line of the loaded content
 	for (auto &l : lines)
 	{
-		longest_expanded = max (longest_expanded, expand_tabs (l.raw_data).size ());
+		longest_expanded = max (longest_expanded, expand_tabs (l.raw_data).first.size ());
 	}
 
 	// If the file is small enough, we are done
@@ -229,7 +230,7 @@ void File::load_more ()
 	std::advance (it, new_start);
 	for (; it != lines.end (); ++it)
 	{
-		longest_expanded = max (longest_expanded, expand_tabs (it->raw_data).size ());
+		longest_expanded = max (longest_expanded, expand_tabs (it->raw_data).first.size ());
 	}
 
 	// If we have read everything, finalize

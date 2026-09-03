@@ -66,11 +66,10 @@ void Display::print_line (Rect container, const std::wstring &s, int flags)
 			container.x > dw ||
 			container.y > dh ||
 			container.x + container.width < 0 ||
-			container.y + container.height < 0 ||
-			l == 0
+			container.y + container.height < 0
 		)
 	{
-		// Container is either collapsed or totally outside the display, or the line is empty - do nothing
+		// Container is either collapsed or totally outside the display - do nothing
 		return;
 	}
 
@@ -99,10 +98,11 @@ void Display::print_line (Rect container, const std::wstring &s, int flags)
 		{
 			for (auto cx = container_begin_x; cx < container_end_x; cx++)
 			{
-				if (cy == y && cx == x)
+				if (cy == y && cx == x && l > 0)
 				{
 					// Skip the whole line
-					cx += l - 1;
+					cx += l - 1 ;
+
 					continue;
 				}
 
