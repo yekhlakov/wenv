@@ -9,11 +9,11 @@ namespace Wenv::Apps
 
 static constexpr std::uint64_t ONE_MB = 1024 * 1024;
 
-std::pair<std::wstring, std::vector<int>> expand_tabs (const std::string &line)
+std::pair<std::wstring, std::vector<std::pair<int, int>>> expand_tabs (const std::string &line)
 {
 	auto wide = maxy::strings::utf8towchar (line);
 	std::wstring out;
-	std::vector<int> tab_positions;
+	std::vector<std::pair<int, int>> tab_spans;
 	int col = 0;
 
 	for (auto ch : wide)
@@ -21,8 +21,9 @@ std::pair<std::wstring, std::vector<int>> expand_tabs (const std::string &line)
 		if (ch == L'\t')
 		{
 			int spaces = 4 - (col % 4);
+			int pos = (int) out.size ();
 			out.append (spaces, L' ');
-			tab_positions.push_back ((int) out.size () - 1);
+			tab_spans.push_back ({ pos, spaces });
 			col += spaces;
 		}
 		else
@@ -32,7 +33,7 @@ std::pair<std::wstring, std::vector<int>> expand_tabs (const std::string &line)
 		}
 	}
 
-	return { out, tab_positions };
+	return { out, tab_spans };
 }
 
 File::File (const std::wstring &file_path)

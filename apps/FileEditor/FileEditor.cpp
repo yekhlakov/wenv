@@ -88,12 +88,12 @@ void FileEditor::redraw (const std::string &path)
 		r.height = 1;
 
 		std::wstring expanded;
-		std::vector<int> tab_positions;
+		std::vector<std::pair<int, int>> tab_spans;
 		if (ln < (int) file->lines.size ())
 		{
 			auto result = expand_tabs (it->raw_data);
 			expanded = std::move (result.first);
-			tab_positions = std::move (result.second);
+			tab_spans = std::move (result.second);
 			++it;
 		}
 
@@ -118,16 +118,27 @@ void FileEditor::redraw (const std::string &path)
 			current_display->PF_TOP | current_display->PF_LEFT | current_display->PF_ERASE_BACKGROUND
 		);
 
-		// Draw tab markers in a separate pass using stored positions
-		if (tab_positions.size() > 0)
+		// Draw tab markers in a separate pass using stored spans
+		if (tab_spans.size() > 0)
 		{
 			current_display->with_color (::Wenv::Display::Palette::Dark_element_color);
-			for (auto pos : tab_positions)
+			for (auto &[pos, len] : tab_spans)
 			{
 				int screen_x = pos - *left;
-				if (screen_x >= 0 && screen_x < area.width)
+				if (screen_x + len > 0 && screen_x < area.width)
 				{
-					current_display->print_char (area.x + screen_x, r.y, L'\u2192');
+					::Wenv::Display::Rect tab_rect;
+					tab_rect.x = area.x + max (0, screen_x);
+					tab_rect.y = r.y;
+					tab_rect.width = min (len, area.width - max (0, screen_x));
+					tab_rect.height = 1;
+
+					current_display->print_line
+					(
+						tab_rect,
+						L"\u2192",
+						current_display->PF_RIGHT | current_display->PF_VCENTER | current_display->PF_ERASE_BACKGROUND
+					);
 				}
 			}
 		}
@@ -139,7 +150,7 @@ void FileEditor::redraw (const std::string &path)
 			current_display->print_char (area.x + area.width - 1, r.y, L'\u2026');
 		}
 
-		if (tab_positions.size() > 0 || truncated)
+		if (tab_spans.size() > 0 || truncated)
 		{
 			// Return the default color if we've changed it to some other color previously
 			current_display->with_color (::Wenv::Display::Palette::Default_color);

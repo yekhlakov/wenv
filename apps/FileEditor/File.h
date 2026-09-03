@@ -19,8 +19,9 @@ struct FileLine
 constexpr int UNKNOWN_LINE_COUNT = -1;
 
 // Expand tabs to 4-column stops and convert the raw UTF-8 line to display text.
-// Returns the expanded string and a list of column positions where tab markers fall.
-std::pair<std::wstring, std::vector<int>> expand_tabs (const std::string &line);
+// Returns the expanded string and a list of (position, length) pairs for each tab expansion.
+// position = column of the first space of the tab expansion, length = expansion width including the arrow.
+std::pair<std::wstring, std::vector<std::pair<int, int>>> expand_tabs (const std::string &line);
 
 class File
 {
