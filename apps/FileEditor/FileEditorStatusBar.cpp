@@ -79,7 +79,7 @@ void FileEditorStatusBar::redraw (const std::string &path)
 		}
 	}
 
-	current_display->with_color (::Wenv::Display::Palette::Highlight_color);
+	current_display->with_color (::Wenv::Display::Palette::Default_color, true);
 
 	current_display->print_line
 	(

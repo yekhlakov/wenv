@@ -14,15 +14,24 @@ Display *Display::with_palette (Palette *p)
 	return this;
 }
 
-Display *Display::with_color (const std::string &n)
+Display *Display::with_color (const std::string &n, bool is_highlight)
 {
 	if (current_palette != nullptr)
 	{
 		auto e = current_palette->get_entry (n);
 
 		current_palette_color = -1;
-		current_foreground_color = e.foreground_color;
-		current_background_color = e.background_color;
+
+		if (is_highlight)
+		{
+			current_foreground_color = e.highlight_foreground_color;
+			current_background_color = e.highlight_background_color;
+		}
+		else
+		{
+			current_foreground_color = e.foreground_color;
+			current_background_color = e.background_color;
+		}
 	}
 
 	return this;

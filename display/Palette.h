@@ -10,13 +10,15 @@ namespace Wenv::Display
 
 struct Palette
 {
-	struct Entry
-	{
-		int foreground_color;
-		int background_color;
+struct Entry
+{
+	int foreground_color;
+	int background_color;
+	int highlight_foreground_color;
+	int highlight_background_color;
 
-		Entry (int fg = 0x00808080, int bg = 0);
-	};
+	Entry (int fg = 0x00808080, int bg = 0, int hfg = 0, int hbg = 0);
+};
 
 	std::vector<Entry> colors;
 	std::unordered_map<std::string, int> named_colors;
@@ -26,7 +28,6 @@ struct Palette
 	Entry get_entry (const std::string &n);
 
 	inline static const char *Default_color = "default";
-	inline static const char *Highlight_color = "highlight";
 	inline static const char *Active_element_color = "active";
 	inline static const char *Dark_element_color = "dark";
 };

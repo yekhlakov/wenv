@@ -172,7 +172,7 @@ void FileList::redraw(const std::string &path)
 
 		if (p == *selected_file_idx && current_display->focused_context == current_context)
 		{
-			current_display->with_color (::Wenv::Display::Palette::Highlight_color);
+			current_display->with_color (::Wenv::Display::Palette::Default_color, true);
 		}
 		else
 		{

@@ -38,15 +38,13 @@ std::wstring * get_current_directory ()
 void Window::initialize ()
 {
     // Palette
-    current_palette->colors.push_back ({ 0x000070aa, 0 }); // default
-    current_palette->colors.push_back ({ 0, 0x000070aa }); // Highlight
-    current_palette->colors.push_back ({ 0x0030c0ff, 0 }); // Active
-    current_palette->colors.push_back ({ 0x00003060, 0 }); // Dark
+    current_palette->colors.push_back ({ 0x000070aa, 0, 0, 0x000070aa }); // default
+    current_palette->colors.push_back ({ 0x0030c0ff, 0, 0x0030c0ff, 0x000070aa }); // Active
+    current_palette->colors.push_back ({ 0x00003060, 0, 0x00003060, 0x000070aa }); // Dark
 
     current_palette->named_colors.insert ({ Palette::Default_color, 0 });
-    current_palette->named_colors.insert ({ Palette::Highlight_color, 1 });
-    current_palette->named_colors.insert ({ Palette::Active_element_color, 2 });
-    current_palette->named_colors.insert ({ Palette::Dark_element_color, 3 });
+    current_palette->named_colors.insert ({ Palette::Active_element_color, 1 });
+    current_palette->named_colors.insert ({ Palette::Dark_element_color, 2 });
 
 
     auto func_menu = new ::Wenv::Apps::FuncMenu { L"MAIN MENU" };

@@ -53,7 +53,7 @@ struct Display
 
 
 	Display *with_palette (Palette *p);
-	Display *with_color (const std::string &n);
+	Display *with_color (const std::string &n, bool is_highlight = false);
 
 	// OUTPUT
 

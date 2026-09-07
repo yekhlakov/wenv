@@ -2,10 +2,12 @@
 
 namespace Wenv::Display
 {
-Palette::Entry::Entry (int fg, int bg):
+Palette::Entry::Entry (int fg, int bg, int hfg, int hbg):
 	foreground_color {fg},
-	background_color {bg}
-{		
+	background_color {bg},
+	highlight_foreground_color {hfg},
+	highlight_background_color {hbg}
+{
 }
 
 Palette::Palette ()
