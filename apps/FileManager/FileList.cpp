@@ -170,13 +170,36 @@ void FileList::redraw(const std::string &path)
 			continue;
 		}
 
-		if (p == *selected_file_idx && current_display->focused_context == current_context)
+		// Determine display color based on file attributes
+		const char *color = ::Wenv::Display::Palette::Default_color;
+		std::wstring display_name { fd.cFileName };
+
+		if (fd.dwFileAttributes & FILE_ATTRIBUTE_HIDDEN)
 		{
-			current_display->with_color (::Wenv::Display::Palette::Default_color, true);
+			color = ::Wenv::Display::Palette::Dark_element_color;
 		}
 		else
 		{
-			current_display->with_color (::Wenv::Display::Palette::Default_color);
+			// Check if the file is executable
+			std::wstring fname_lower = display_name;
+			std::transform (fname_lower.begin (), fname_lower.end (), fname_lower.begin (), ::towlower);
+
+			if (fname_lower.ends_with (L".exe") || fname_lower.ends_with (L".bat") ||
+				fname_lower.ends_with (L".com") || fname_lower.ends_with (L".cmd") ||
+				fname_lower.ends_with (L".ps1") || fname_lower.ends_with (L".msi"))
+			{
+				color = ::Wenv::Display::Palette::Active_element_color;
+				display_name += L"*";
+			}
+		}
+
+		if (p == *selected_file_idx && current_display->focused_context == current_context)
+		{
+			current_display->with_color (color, true);
+		}
+		else
+		{
+			current_display->with_color (color);
 		}
 
 		fn_rect.y = current_client_area.y + p - p_begin;
@@ -189,7 +212,7 @@ void FileList::redraw(const std::string &path)
 		current_display->print_line
 		(
 			fn_rect,
-			std::wstring { fd.cFileName } + (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ? L"/" : L""),
+			display_name + (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ? L"/" : L""),
 			current_display->PF_TOP | current_display->PF_LEFT | current_display->PF_ERASE_BACKGROUND
 		);
 
