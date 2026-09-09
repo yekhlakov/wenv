@@ -140,7 +140,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="apps\App.h" />
-    <ClInclude Include="apps\Context.h" />
     <ClInclude Include="apps\FileEditor\File.h" />
     <ClInclude Include="apps\FileEditor\FileEditor.h" />
     <ClInclude Include="apps\FileEditor\FileEditorStatusBar.h" />
@@ -149,6 +148,7 @@
     <ClInclude Include="apps\FileManager\FileList.h" />
     <ClInclude Include="apps\FileManager\FileInfoShort.h" />
     <ClInclude Include="display\Palette.h" />
+    <ClInclude Include="Context.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="layout\Grid.h" />
     <ClInclude Include="layout\Layout.h" />

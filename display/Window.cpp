@@ -3,6 +3,7 @@
 #include "Palette.h"
 #include "Window.h"
 #include "../Resource.h"
+#include "../Context.h"
 #include "../maxy/strings.h"
 
 namespace Wenv::Display {
@@ -49,7 +50,8 @@ Window::Window(HINSTANCE hInstance, std::wstring title, std::wstring className):
 	char_width {0},
 	char_height {32},
 	current_palette {new Palette()},
-	hFont {NULL}
+	hFont {NULL},
+	persistent_context {new ::Wenv::Context { "persistent" }}
 {
     
     WNDCLASSEXW wcex;
@@ -166,6 +168,7 @@ Window::~Window()
         ReleaseDC (hwnd, hdc);
     }
 
+    delete persistent_context;
     current_display = nullptr;
 }
 

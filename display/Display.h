@@ -34,14 +34,17 @@ struct Display
 	::Wenv::Layout::Grid * grid = nullptr;
 	std::vector<::Wenv::Apps::App *> all_apps;
 	std::vector<::Wenv::Apps::App *> listening_apps;
-	std::unordered_map<std::string, ::Wenv::Apps::Context *> contexts;
+	std::unordered_map<std::string, ::Wenv::Context *> contexts;
 
 	::Wenv::Apps::App *focused_app = nullptr;
-	::Wenv::Apps::Context *focused_context = nullptr;
+	::Wenv::Context *focused_context = nullptr;
 
 	::Wenv::Apps::App *add_app (::Wenv::Apps::App *a);
-	::Wenv::Apps::Context * add_context (::Wenv::Apps::Context *c);
-	::Wenv::Apps::Context *get_context (const std::string &n);
+	::Wenv::Context * add_context (::Wenv::Context *c);
+	::Wenv::Context *get_context (const std::string &n);
+
+	// Get the global context shared across all displays (owned by the window)
+	::Wenv::Context *get_persistent_context ();
 
 	Window *window = nullptr;
 
@@ -73,7 +76,7 @@ struct Display
 	void print_line_v (size_t pos, size_t ln, const std::wstring & s);
 
 	// Draw a grid (recursively)
-	void draw_grid (::Wenv::Layout::Grid &grid, std::string path, ::Wenv::Apps::Context *ctx = nullptr);
+	void draw_grid (::Wenv::Layout::Grid &grid, std::string path, ::Wenv::Context *ctx = nullptr);
 
 	// Draw a grid block (using its boundary strings)
 	void draw_block_boundary (::Wenv::Layout::Block &b, const std::string &path);

@@ -3,14 +3,14 @@
 #include <Windows.h>
 #include "../../display/Display.h"
 #include "../../display/Palette.h"
-#include "../Context.h"
+#include "../../Context.h"
 #include "FileInfoShort.h"
 
 namespace Wenv::Apps
 {
 
 
-int *get_selected_file_idx (Context *c, const std::wstring &dirname);
+int *get_selected_file_idx (::Wenv::Context *c, const std::wstring &dirname);
 
 void FileInfoShort::draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area)
 {

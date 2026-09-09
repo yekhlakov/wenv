@@ -247,7 +247,7 @@ Dimensions Grid::calculate_block_dimensions (
 	return result;
 }
 
-void Grid::add_block (Dimensions grid_block_dimensions, int btype, Grid * nested_grid, ::Wenv::Apps::App * app, ::Wenv::Apps::Context *context)
+void Grid::add_block (Dimensions grid_block_dimensions, int btype, Grid * nested_grid, ::Wenv::Apps::App * app, ::Wenv::Context *context)
 {
 	blocks.push_back ({ grid_block_dimensions, btype, nested_grid, app, context });
 }
@@ -529,7 +529,7 @@ std::wstring & Block::get_bottom_boundary (const std::string & path)
 	return instances[path].right_boundary;
 }
 
-::Wenv::Apps::Context *Block::get_context (::Wenv::Apps::Context *dflt)
+::Wenv::Context *Block::get_context (::Wenv::Context *dflt)
 {
 	// Own context takes precendence
 	if (context != nullptr)

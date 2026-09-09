@@ -54,10 +54,10 @@
     <ClInclude Include="Types.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
-    <ClInclude Include="apps\FuncMenu.h">
+    <ClInclude Include="Context.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
-    <ClInclude Include="apps\Context.h">
+    <ClInclude Include="apps\FuncMenu.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
     <ClInclude Include="apps\FileManager\FileList.h">

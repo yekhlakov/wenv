@@ -3,7 +3,7 @@
 #include "../../maxy/strings.h"
 #include "../../display/Display.h"
 #include "../../display/Palette.h"
-#include "../Context.h"
+#include "../../Context.h"
 #include "File.h"
 #include "FileEditorStatusBar.h"
 
@@ -33,8 +33,6 @@ void FileEditorStatusBar::redraw (const std::string &path)
 	auto target = current_context->get<std::wstring> ("edit-target");
 	auto pwd = current_context->get<std::wstring> ("edit-pwd");
 	auto file = current_context->get<File> ("file");
-	auto top = current_context->get<int> ("top-line", [] () { return new int {}; });
-	auto left = current_context->get<int> ("left-col", [] () { return new int {}; });
 
 	if (target == nullptr || pwd == nullptr)
 	{
@@ -47,6 +45,12 @@ void FileEditorStatusBar::redraw (const std::string &path)
 		full_path += L"\\";
 	}
 	full_path += *target;
+
+	auto per_file_key_top = std::string { "top-line:" } + maxy::strings::wchartoutf8 (full_path);
+	auto per_file_key_left = std::string { "left-col:" } + maxy::strings::wchartoutf8 (full_path);
+	auto per_ctx = current_display->get_persistent_context ();
+	auto top = per_ctx->get<int> (per_file_key_top, [] () { return new int {}; });
+	auto left = per_ctx->get<int> (per_file_key_left, [] () { return new int {}; });
 
 	// Right-aligned information
 	std::wstring right;

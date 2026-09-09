@@ -7,7 +7,7 @@
 #include "../../display/Palette.h"
 #include "../../display/Window.h"
 #include "FileList.h"
-#include "../Context.h"
+#include "../../Context.h"
 
 #pragma comment(lib, "shlwapi.lib")
 
@@ -110,7 +110,7 @@ File_list_type * sort_file_list (File_list_type *v, int sort_mode)
 	return v;
 }
 
-int *get_selected_file_idx (Context * c, const std::wstring &dirname)
+int *get_selected_file_idx (::Wenv::Context * c, const std::wstring &dirname)
 {
 	return c->get<int> ("selected-file-idx " + maxy::strings::wchartoutf8 (dirname), [] () ->int *{ return new int { 0 }; });
 }

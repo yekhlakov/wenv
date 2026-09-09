@@ -6,7 +6,6 @@
 
 namespace Wenv::Apps {
 class App;
-class Context;
 }
 
 namespace Wenv::Layout {
@@ -43,7 +42,7 @@ struct Block : public Dimensions
 	::Wenv::Apps::App *app = nullptr;
 
 	// Context for the whole block (or app)
-	::Wenv::Apps::Context *context = nullptr;
+	::Wenv::Context *context = nullptr;
 
 	std::unordered_map<std::string, Block_instance> instances;
 
@@ -53,7 +52,7 @@ struct Block : public Dimensions
 	std::wstring &get_bottom_boundary (const std::string &path);
 	std::wstring &get_right_boundary (const std::string &path);
 
-	::Wenv::Apps::Context *get_context (::Wenv::Apps::Context *dflt);
+	::Wenv::Context *get_context (::Wenv::Context *dflt);
 };
 
 struct Grid
@@ -74,7 +73,7 @@ struct Grid
 	std::vector<std::vector<wchar_t>> boundary_elements;
 
 	// The context for all apps in this grid
-	::Wenv::Apps::Context *context = nullptr;
+	::Wenv::Context *context = nullptr;
 
 	// Is the grid exclusive (== do the blocks have their own `exclusive` boundary or they share their boundaries)
 	bool is_exclusive;
@@ -90,7 +89,7 @@ struct Grid
 		int btype, 
 		Grid *nested_grid = nullptr, 
 		::Wenv::Apps::App * app = nullptr,
-		::Wenv::Apps::Context * context = nullptr
+		::Wenv::Context * context = nullptr
 	);
 	// Bake the grid (compute dimensions and boundary strings for all its blocks)
 	void bake (Dimensions container_dimensions, std::vector<std::vector<wchar_t>> & buffer, std::string path);

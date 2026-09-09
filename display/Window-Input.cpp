@@ -2,7 +2,7 @@
 #include "Window.h"
 #include "Display.h"
 #include "../apps/App.h"
-#include "../apps/Context.h"
+#include "../Context.h"
 
 namespace Wenv::Display
 {

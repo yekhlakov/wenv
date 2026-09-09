@@ -3,7 +3,7 @@
 #include "Palette.h"
 #include "../layout/Grid.h"
 #include "../maxy/control/container.h"
-#include "../apps/Context.h"
+#include "../Context.h"
 #include "../apps/FuncMenu.h"
 
 #include "../apps/FileManager/FileList.h"
@@ -61,9 +61,9 @@ void Window::initialize ()
 
         d->grid = grid;
 
-        auto left_context = d->add_context (new ::Wenv::Apps::Context { "file-manager-left-panel" });
+        auto left_context = d->add_context (new ::Wenv::Context { "file-manager-left-panel" });
         left_context->set ("pwd", get_current_directory ());
-        auto right_context = d->add_context (new ::Wenv::Apps::Context { "file-manager-right-panel" });
+        auto right_context = d->add_context (new ::Wenv::Context { "file-manager-right-panel" });
         right_context->set ("pwd", get_current_directory ());
         d->focused_context = left_context;
 
@@ -133,7 +133,7 @@ void Window::initialize ()
         grid->add_block ({ 0,0,1,1 }, -1, nullptr, status);
         grid->add_block ({ 0,1,1,1 }, -1, nullptr, editor);
         grid->add_block ({ 0,2,1,1 }, -1, nullptr, func_menu);
-        grid->context = d->add_context (new ::Wenv::Apps::Context { "file-editor" });
+        grid->context = d->add_context (new ::Wenv::Context { "file-editor" });
         d->focused_context = grid->context;
         grid->context->set ("focused-app", editor);
         grid->context->set ("app-group", new std::vector<::Wenv::Apps::App *> { status, editor, func_menu });

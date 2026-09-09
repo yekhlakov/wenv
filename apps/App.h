@@ -6,13 +6,6 @@
 namespace Wenv::Apps
 {
 
-// Application context
-// The application must store all its data in this context
-// Because several instances of the application on the screen are possible
-// and their content may vary.
-class Context;
-
-
 // The application
 class App
 {
@@ -26,14 +19,14 @@ protected:
 public:
 	App (const std::wstring &n) : name { n } {}
 
-	Context *current_context = nullptr;
+	::Wenv::Context *current_context = nullptr;
 
 	// The app may require the core to forward all keypresses to it regardles of current focus
 	// (The modal boxes do not allow keypresses propagate to such apps)
 	virtual bool wants_all_keypresses () { return false; }
 
 	// Set current context for the application
-	virtual App *with_context (Context *c) { current_context = c; return this; }
+	virtual App *with_context (::Wenv::Context *c) { current_context = c; return this; }
 
 	// The core calls this function when it requires the app to redraw its contents
 	virtual void draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area)

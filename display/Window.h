@@ -5,6 +5,10 @@
 #include <unordered_map>
 #include <vector>
 
+namespace Wenv {
+class Context;
+}
+
 namespace Wenv::Layout {
 struct Grid;
 }
@@ -42,6 +46,9 @@ struct Window {
 
     HFONT hFont;
     std::vector<std::wstring> monospace_fonts;
+
+    // Global context shared across all displays
+    ::Wenv::Context *persistent_context = nullptr;
 
     Window(HINSTANCE hInstance, std::wstring title, std::wstring className);
     ~Window();

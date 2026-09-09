@@ -4,7 +4,7 @@
 #include <string>
 #include <unordered_map>
 
-namespace Wenv::Apps
+namespace Wenv
 {
 
 class Context

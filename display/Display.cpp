@@ -1,9 +1,10 @@
 #include <format>
 #include <random>
 #include "Display.h"
+#include "Window.h"
 #include "../Layout/Grid.h"
 #include "../apps/FuncMenu.h"
-#include "../apps/Context.h"
+#include "../Context.h"
 
 namespace Wenv::Display
 {
@@ -55,7 +56,7 @@ void Display::resize (size_t width, size_t height)
     draw_grid (*grid, "root");
 }
 
-void Display::draw_grid (::Wenv::Layout::Grid &grid, std::string path, ::Wenv::Apps::Context * ctx)
+void Display::draw_grid (::Wenv::Layout::Grid &grid, std::string path, ::Wenv::Context * ctx)
 {
 	// Fall back to the grid own context
 	if (ctx == nullptr)
@@ -111,14 +112,14 @@ void Display::set_color (int pc, int fg, int bg)
 }
 
 
-::Wenv::Apps::Context *Display::add_context (::Wenv::Apps::Context *c)
+::Wenv::Context *Display::add_context (::Wenv::Context *c)
 {
     contexts[c->get_name ()] = c;
 
     return c;
 }
 
-::Wenv::Apps::Context * Display::get_context (const std::string & n)
+::Wenv::Context * Display::get_context (const std::string & n)
 {
     if (contexts.find (n) == contexts.end ())
     {
@@ -126,6 +127,16 @@ void Display::set_color (int pc, int fg, int bg)
     }
 
     return contexts[n];
+}
+
+::Wenv::Context *Display::get_persistent_context ()
+{
+    if (window == nullptr)
+    {
+        return nullptr;
+    }
+
+    return window->persistent_context;
 }
 
 } // namespace Wenv::Display

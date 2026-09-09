@@ -3,10 +3,11 @@
 namespace Wenv
 {
 
+class Context;
+
 namespace Apps
 {
 class App;
-class Context;
 }
 
 namespace Layout

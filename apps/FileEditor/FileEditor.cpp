@@ -4,7 +4,8 @@
 #include <vector>
 #include "../../display/Display.h"
 #include "../../display/Palette.h"
-#include "../Context.h"
+#include "../../maxy/strings.h"
+#include "../../Context.h"
 #include "File.h"
 #include "FileEditor.h"
 
@@ -52,14 +53,17 @@ void FileEditor::redraw (const std::string &path)
 
 		current_context->set ("file", file);
 		current_context->set ("viewed-path", new std::wstring { full_path });
-
-		current_context->erase ("top-line");
-		current_context->erase ("left-col");
 	}
 
 	auto area = get_client_area (path);
-	auto top = current_context->get<int> ("top-line", [] () { return new int {}; });
-	auto left = current_context->get<int> ("left-col", [] () { return new int {}; });
+
+	// Store position in persistent context per file, keyed by full path
+	auto per_file_key_top = std::string { "top-line:" } + maxy::strings::wchartoutf8 (full_path);
+	auto per_file_key_left = std::string { "left-col:" } + maxy::strings::wchartoutf8 (full_path);
+	auto per_ctx = current_display->get_persistent_context ();
+
+	auto top = per_ctx->get<int> (per_file_key_top, [] () { return new int {}; });
+	auto left = per_ctx->get<int> (per_file_key_left, [] () { return new int {}; });
 
 	// Load more data if the viewport is near the end of loaded content
 	file->ensure_loaded (*top, area.height);
@@ -214,8 +218,27 @@ void FileEditor::keypress (unsigned int key, int modifiers)
 
 	auto path = *current_context->get<std::string> ("focused-path");
 	auto area = get_client_area (path);
-	auto top = current_context->get<int> ("top-line", [] () { return new int {}; });
-	auto left = current_context->get<int> ("left-col", [] () { return new int {}; });
+
+	// Reconstruct full path to look up per-file position in persistent context
+	auto target = current_context->get<std::wstring> ("edit-target");
+	auto pwd = current_context->get<std::wstring> ("edit-pwd");
+	if (target == nullptr || pwd == nullptr)
+	{
+		return;
+	}
+
+	auto full_path = *pwd;
+	if (full_path.back () != L'\\' && full_path.back () != L'/')
+	{
+		full_path += L"\\";
+	}
+	full_path += *target;
+
+	auto per_file_key_top = std::string { "top-line:" } + maxy::strings::wchartoutf8 (full_path);
+	auto per_file_key_left = std::string { "left-col:" } + maxy::strings::wchartoutf8 (full_path);
+	auto per_ctx = current_display->get_persistent_context ();
+	auto top = per_ctx->get<int> (per_file_key_top, [] () { return new int {}; });
+	auto left = per_ctx->get<int> (per_file_key_left, [] () { return new int {}; });
 
 	if (key == VK_UP)
 	{
