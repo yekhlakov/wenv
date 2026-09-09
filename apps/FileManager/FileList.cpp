@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <regex>
 #include <Shlwapi.h>
 #include <Windows.h>
 #include "../../maxy/strings.h"
@@ -114,6 +115,16 @@ int *get_selected_file_idx (Context * c, const std::wstring &dirname)
 	return c->get<int> ("selected-file-idx " + maxy::strings::wchartoutf8 (dirname), [] () ->int *{ return new int { 0 }; });
 }
 
+bool is_executable_file (const std::wstring &filename)
+{
+	static const std::wregex pattern (
+		LR"(\.(exe|bat|com|cmd|ps1|msi)$)",
+		std::regex_constants::icase
+	);
+
+	return std::regex_search (filename, pattern);
+}
+
 void FileList::draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area)
 {
 	App::draw (display, path, client_area);
@@ -178,19 +189,20 @@ void FileList::redraw(const std::string &path)
 		{
 			color = ::Wenv::Display::Palette::Dark_element_color;
 		}
-		else
+		else if (is_executable_file (display_name))
 		{
-			// Check if the file is executable
-			std::wstring fname_lower = display_name;
-			std::transform (fname_lower.begin (), fname_lower.end (), fname_lower.begin (), ::towlower);
+			color = ::Wenv::Display::Palette::Active_element_color;
+			display_name += L"*";
+		}
 
-			if (fname_lower.ends_with (L".exe") || fname_lower.ends_with (L".bat") ||
-				fname_lower.ends_with (L".com") || fname_lower.ends_with (L".cmd") ||
-				fname_lower.ends_with (L".ps1") || fname_lower.ends_with (L".msi"))
-			{
-				color = ::Wenv::Display::Palette::Active_element_color;
-				display_name += L"*";
-			}
+		if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+		{
+			display_name += L"/";
+		}
+
+		if (fd.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
+		{
+			display_name += L"&";
 		}
 
 		if (p == *selected_file_idx && current_display->focused_context == current_context)
@@ -212,7 +224,7 @@ void FileList::redraw(const std::string &path)
 		current_display->print_line
 		(
 			fn_rect,
-			display_name + (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY ? L"/" : L""),
+			display_name,
 			current_display->PF_TOP | current_display->PF_LEFT | current_display->PF_ERASE_BACKGROUND
 		);
 
