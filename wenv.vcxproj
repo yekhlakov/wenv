@@ -152,6 +152,8 @@
     <ClInclude Include="framework.h" />
     <ClInclude Include="layout\Grid.h" />
     <ClInclude Include="layout\Layout.h" />
+    <ClInclude Include="maxy\escape.h" />
+    <ClInclude Include="maxy\json.h" />
     <ClInclude Include="maxy\strings.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="targetver.h" />
@@ -175,9 +177,10 @@
     <ClCompile Include="display\Window-Input.cpp" />
     <ClCompile Include="layout\Grid.cpp" />
     <ClCompile Include="layout\Layout.cpp" />
+    <ClCompile Include="maxy\escape.cpp" />
+    <ClCompile Include="maxy\json.cpp" />
     <ClCompile Include="maxy\strings.cpp" />
     <ClCompile Include="wenv.cpp" />
-    <ClCompile Include="fonts.cpp" />
     <ClCompile Include="display\Character.cpp" />
     <ClCompile Include="display\Display.cpp" />
     <ClCompile Include="display\Window.cpp" />

@@ -30,6 +30,10 @@ struct Entry
 	inline static const char *Default_color = "default";
 	inline static const char *Active_element_color = "active";
 	inline static const char *Dark_element_color = "dark";
+	inline static const char *Quote_element_color = "quote";
+	inline static const char *Number_element_color = "number";
+	inline static const char *Alter_element_color = "alter";
+	inline static const char *Warning_element_color = "warning";
 };
 
 } // namespace Wenv::Display

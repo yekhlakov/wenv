@@ -1,9 +1,11 @@
 
+#include <fstream>
 #include "Display.h"
 #include "Palette.h"
 #include "Window.h"
 #include "../Resource.h"
 #include "../Context.h"
+#include "../maxy/json.h"
 #include "../maxy/strings.h"
 
 namespace Wenv::Display {
@@ -42,6 +44,31 @@ std::vector<std::wstring> GetMonospaceFonts (HDC hdc)
     return monospaceFonts;
 }
 
+// Save a serialized context into the cache file, overwriting its contents
+void save_cache (const maxy::data::json &data)
+{
+	std::ofstream f { "cache.json" };
+
+	if (f)
+	{
+		f << data;
+	}
+}
+
+// Load the cache file contents (an empty object when the file is absent)
+maxy::data::json load_cache ()
+{
+	std::ifstream f { "cache.json" };
+
+	if (!f)
+	{
+		// No cache file yet
+		return maxy::data::json::make_object ();
+	}
+
+	return maxy::data::json::parse (f);
+}
+
 
 Window::Window(HINSTANCE hInstance, std::wstring title, std::wstring className):
 	hwnd {NULL}, 
@@ -53,7 +80,10 @@ Window::Window(HINSTANCE hInstance, std::wstring title, std::wstring className):
 	hFont {NULL},
 	persistent_context {new ::Wenv::Context { "persistent" }}
 {
-    
+	// Restore the per-file positions saved by the previous run, if any
+	auto cache = load_cache ();
+	persistent_context->deserialize (cache);
+
     WNDCLASSEXW wcex;
     wcex.cbSize = sizeof(WNDCLASSEX);
     wcex.style = CS_HREDRAW | CS_VREDRAW;
@@ -163,13 +193,16 @@ Window::~Window()
         DeleteObject (hFont);
     }
 
-    if (hdc)
-    {
-        ReleaseDC (hwnd, hdc);
-    }
+if (hdc)
+	{
+		ReleaseDC (hwnd, hdc);
+	}
 
-    delete persistent_context;
-    current_display = nullptr;
+	// Save the per-file positions to be restored on the next run
+	save_cache (persistent_context->serialize ());
+
+	delete persistent_context;
+	current_display = nullptr;
 }
 
 LRESULT CALLBACK Window::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)

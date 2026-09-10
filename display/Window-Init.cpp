@@ -40,11 +40,19 @@ void Window::initialize ()
     // Palette
     current_palette->colors.push_back ({ 0x000070aa, 0, 0, 0x000070aa }); // default
     current_palette->colors.push_back ({ 0x0030c0ff, 0, 0x0030c0ff, 0x000070aa }); // Active
-    current_palette->colors.push_back ({ 0x00003060, 0, 0x00003060, 0x000070aa }); // Dark
+    current_palette->colors.push_back ({ 0x00004460, 0, 0x00004060, 0x000070aa }); // Dark
+    current_palette->colors.push_back ({ 0x0000aaaa, 0, 0x00006066, 0x000070aa }); // Quote aka String
+    current_palette->colors.push_back ({ 0x008877aa, 0, 0x00554466, 0x000070aa }); // Number
+    current_palette->colors.push_back ({ 0x00667788, 0, 0x00334455, 0x000070aa }); // Alter aka Define
+    current_palette->colors.push_back ({ 0x000040aa, 0, 0x00003099, 0x000070aa }); // Warning
 
     current_palette->named_colors.insert ({ Palette::Default_color, 0 });
     current_palette->named_colors.insert ({ Palette::Active_element_color, 1 });
     current_palette->named_colors.insert ({ Palette::Dark_element_color, 2 });
+    current_palette->named_colors.insert ({ Palette::Quote_element_color, 3 });
+    current_palette->named_colors.insert ({ Palette::Number_element_color, 4 });
+    current_palette->named_colors.insert ({ Palette::Alter_element_color, 5 });
+    current_palette->named_colors.insert ({ Palette::Warning_element_color, 6 });
 
 
     auto func_menu = new ::Wenv::Apps::FuncMenu { L"MAIN MENU" };

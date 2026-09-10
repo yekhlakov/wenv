@@ -3,3 +3,4 @@ tmp
 *.aps
 *.exe
 *.bat
+cache.json

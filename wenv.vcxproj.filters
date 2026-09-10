@@ -42,6 +42,12 @@
     <ClInclude Include="display\Window.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
+    <ClInclude Include="maxy\escape.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
+    <ClInclude Include="maxy\json.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
     <ClInclude Include="maxy\strings.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
@@ -75,6 +81,9 @@
     <ClInclude Include="apps\FileEditor\FileEditor.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
+    <ClInclude Include="apps\FileEditor\File.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="wenv.cpp">
@@ -95,10 +104,13 @@
     <ClCompile Include="display\Character.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
-    <ClCompile Include="fonts.cpp">
+    <ClCompile Include="display\Window.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
-    <ClCompile Include="display\Window.cpp">
+    <ClCompile Include="maxy\escape.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="maxy\json.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
     <ClCompile Include="maxy\strings.cpp">
@@ -132,6 +144,9 @@
       <Filter>Исходные файлы</Filter>
     </ClCompile>
     <ClCompile Include="apps\FileEditor\FileEditorStatusBar.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="apps\FileEditor\File.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
   </ItemGroup>
