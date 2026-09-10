@@ -63,7 +63,7 @@
     <ClInclude Include="Context.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
-    <ClInclude Include="apps\FuncMenu.h">
+    <ClInclude Include="apps\FuncMenu\FuncMenu.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
     <ClInclude Include="apps\FileManager\FileList.h">
@@ -119,7 +119,7 @@
     <ClCompile Include="layout\Grid.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
-    <ClCompile Include="apps\FuncMenu.cpp">
+    <ClCompile Include="apps\FuncMenu\FuncMenu.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
     <ClCompile Include="display\Window-Init.cpp">

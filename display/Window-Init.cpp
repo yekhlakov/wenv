@@ -4,7 +4,7 @@
 #include "../layout/Grid.h"
 #include "../maxy/control/container.h"
 #include "../Context.h"
-#include "../apps/FuncMenu.h"
+#include "../apps/FuncMenu/FuncMenu.h"
 
 #include "../apps/FileManager/FileList.h"
 #include "../apps/FileManager/FileListHeader.h"
@@ -93,12 +93,15 @@ void Window::initialize ()
             auto c3 = d->add_app (new ::Wenv::Apps::FileInfoShort { L"i" });
             d->add_app (func_menu);
 
-            left_context->set ("app-group", new std::vector<::Wenv::Apps::App *> { c0, c1, c2, c3 });
-            right_context->set ("app-group", new std::vector<::Wenv::Apps::App *> { c0, c1, c2, c3 });
+            left_context->set ("app-group", new std::vector<::Wenv::Apps::App *> { c0, c1, c2, c3, func_menu });
+            right_context->set ("app-group", new std::vector<::Wenv::Apps::App *> { c0, c1, c2, c3, func_menu });
             left_context->set ("focused-app", c1);
             right_context->set ("focused-app", c1);
             left_context->set ("focused-path", new std::string { "root.0.1" });
             right_context->set ("focused-path", new std::string { "root.1.1" });
+	    left_context->set ("func-menu", func_menu);
+	    right_context->set ("func-menu", func_menu);
+
 
             medium_panel->add_block ({ 0, 0, 2, 1 }, -1, nullptr, c0);
             medium_panel->add_block ({ 0, 1, 1, 1 }, 1, nullptr, c1);
@@ -147,6 +150,7 @@ void Window::initialize ()
         grid->context->set ("app-group", new std::vector<::Wenv::Apps::App *> { status, editor, func_menu });
         grid->context->set ("focused-path", new std::string { "root.1" });
         grid->context->set ("status-bar", status);
+	grid->context->set ("func-menu", func_menu);
 
         d->grid = grid;
 

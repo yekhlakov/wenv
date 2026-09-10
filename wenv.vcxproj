@@ -144,7 +144,7 @@
     <ClInclude Include="apps\FileEditor\FileEditor.h" />
     <ClInclude Include="apps\FileEditor\FileEditorStatusBar.h" />
     <ClInclude Include="apps\FileManager\FileListHeader.h" />
-    <ClInclude Include="apps\FuncMenu.h" />
+    <ClInclude Include="apps\FuncMenu\FuncMenu.h" />
     <ClInclude Include="apps\FileManager\FileList.h" />
     <ClInclude Include="apps\FileManager\FileInfoShort.h" />
     <ClInclude Include="display\Palette.h" />
@@ -170,7 +170,7 @@
     <ClCompile Include="apps\FileManager\FileInfoShort.cpp" />
     <ClCompile Include="apps\FileManager\FileList.cpp" />
     <ClCompile Include="apps\FileManager\FileListHeader.cpp" />
-    <ClCompile Include="apps\FuncMenu.cpp" />
+    <ClCompile Include="apps\FuncMenu\FuncMenu.cpp" />
     <ClCompile Include="display\Display-Output.cpp" />
     <ClCompile Include="display\Palette.cpp" />
     <ClCompile Include="display\Window-Init.cpp" />

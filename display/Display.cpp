@@ -3,7 +3,7 @@
 #include "Display.h"
 #include "Window.h"
 #include "../Layout/Grid.h"
-#include "../apps/FuncMenu.h"
+#include "../apps/FuncMenu/FuncMenu.h"
 #include "../Context.h"
 
 namespace Wenv::Display
