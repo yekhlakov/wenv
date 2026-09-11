@@ -53,4 +53,14 @@ void Window::handle_mousemove (WPARAM wParam, LPARAM lParam)
 	draw (hdc);
 }
 
+bool Window::get_key_state (int key) const
+{
+	if (key < 0 || key >= 256)
+	{
+		return false;
+	}
+
+	return key_state[key];
+}
+
 }

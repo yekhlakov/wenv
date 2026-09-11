@@ -319,7 +319,11 @@ void FileList::keypress (unsigned int key, int modifiers)
 			else
 			{
 				// go down
-				*pwd += L"\\" + next;
+				if (pwd->back () != L'\\')
+				{
+					*pwd += L"\\";
+				}
+				*pwd += next;
 
 			}
 			current_context->erase ("list");

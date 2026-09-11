@@ -8,7 +8,20 @@
 namespace Wenv::Apps
 {
 
-void FuncMenu::set_command (int number, const std::wstring &name, FuncMenuAction action)
+std::array<FuncMenuCommand, 12> &FuncMenu::get_command_list (FuncMenuCommandList list)
+{
+	switch (list)
+	{
+	case FuncMenuCommandList::Ctrl: return ctrl_commands;
+	case FuncMenuCommandList::Alt: return alt_commands;
+	case FuncMenuCommandList::Shift: return shift_commands;
+	case FuncMenuCommandList::CtrlShift: return ctrl_shift_commands;
+	case FuncMenuCommandList::CtrlAlt: return ctrl_alt_commands;
+	default: return commands;
+	}
+}
+
+void FuncMenu::set_command (int number, const std::wstring &name, FuncMenuAction action, FuncMenuCommandList list)
 {
 	if (number < 1 || number > 12)
 	{
@@ -16,17 +29,59 @@ void FuncMenu::set_command (int number, const std::wstring &name, FuncMenuAction
 		return;
 	}
 
-	commands[number - 1] = FuncMenuCommand { name, std::move (action) };
+	get_command_list (list)[number - 1] = FuncMenuCommand { name, std::move (action) };
 }
 
-void FuncMenu::erase_command (int number)
+void FuncMenu::erase_command (int number, FuncMenuCommandList list)
 {
 	if (number < 1 || number > 12)
 	{
 		return;
 	}
 
-	commands[number - 1] = FuncMenuCommand {};
+	get_command_list (list)[number - 1] = FuncMenuCommand {};
+}
+
+FuncMenuCommandList FuncMenu::get_active_command_list () const
+{
+	if (current_display == nullptr)
+	{
+		return FuncMenuCommandList::Default;
+	}
+
+	// The pressed modifiers decide which command list is shown.
+	// The combinations without their own lists (alt+shift, ctrl+alt+shift)
+	// fall back to the closest list above them.
+	auto ctrl = current_display->get_key_state (VK_CONTROL);
+	auto alt = current_display->get_key_state (VK_MENU);
+	auto shift = current_display->get_key_state (VK_SHIFT);
+
+	if (ctrl && alt)
+	{
+		return FuncMenuCommandList::CtrlAlt;
+	}
+
+	if (ctrl && shift)
+	{
+		return FuncMenuCommandList::CtrlShift;
+	}
+
+	if (ctrl)
+	{
+		return FuncMenuCommandList::Ctrl;
+	}
+
+	if (alt)
+	{
+		return FuncMenuCommandList::Alt;
+	}
+
+	if (shift)
+	{
+		return FuncMenuCommandList::Shift;
+	}
+
+	return FuncMenuCommandList::Default;
 }
 
 void FuncMenu::draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area)
@@ -51,9 +106,12 @@ void FuncMenu::redraw (const std::string &path)
 
 	auto slot_width = own_area.width / 12;
 
-	for (size_t i = 0; i < commands.size (); i++)
+	// Show the commands of the list matching the currently pressed modifiers
+	auto &active_commands = get_command_list (get_active_command_list ());
+
+	for (size_t i = 0; i < active_commands.size (); i++)
 	{
-		auto &command = commands[i];
+		auto &command = active_commands[i];
 		auto number_text = std::format (L"{}", i + 1);
 
 		// The label is centered within the key slot
@@ -87,10 +145,13 @@ void FuncMenu::keypress (unsigned int key, int modifiers)
 		return;
 	}
 
-	// Run the command bound to the pressed function key, if any
-	if (key >= VK_F1 && key <= VK_F12 && commands[key - VK_F1].action)
+	// Run the command bound to the pressed function key, if any.
+	// The command comes from the list of the currently pressed modifiers.
+	auto &active_commands = get_command_list (get_active_command_list ());
+
+	if (key >= VK_F1 && key <= VK_F12 && active_commands[key - VK_F1].action)
 	{
-		commands[key - VK_F1].action (current_display, current_context);
+		active_commands[key - VK_F1].action (current_display, current_context);
 		redraw_all ();
 		return;
 	}

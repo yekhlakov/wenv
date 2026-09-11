@@ -69,6 +69,9 @@ struct Window {
     void handle_keyup (WPARAM wParam, LPARAM lParam);
     void handle_mousemove (WPARAM wParam, LPARAM lParam);
 
+    // The current pressed state of the given key
+    bool get_key_state (int key) const;
+
     void activate_current ();
 
     void draw(HDC hdc);

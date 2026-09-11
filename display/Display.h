@@ -48,6 +48,9 @@ struct Display
 
 	Window *window = nullptr;
 
+	// The current pressed state of the given key (proxied to the window)
+	bool get_key_state (int key) const;
+
 	Display (const std::wstring &n);
 	~Display ();
 
@@ -72,6 +75,11 @@ struct Display
 	// Extended printing
 	void print_line (Rect container, const std::wstring &s, int flags = 0);
 
+	// Compute the dimensions of the minimal rectangle (in characters) this text can be
+	// printed into, with word wrapping. The result may exceed the max limits if the text
+	// forces it; the limits only add a penalty to the area when options are compared.
+	Rect get_min_rectangle (const std::wstring &text, int min_width = 1, int min_height = 1, int max_width = 666, int max_height = 666);
+
 	// Print line top to bottom starting from specified position
 	void print_line_v (size_t pos, size_t ln, const std::wstring & s);
 
@@ -80,6 +88,12 @@ struct Display
 
 	// Draw a grid block (using its boundary strings)
 	void draw_block_boundary (::Wenv::Layout::Block &b, const std::string &path);
+
+	// Redraw grid boundaries that cross the given display row within the given
+	// horizontal span (recursively). App contents are not redrawn; use this to
+	// restore borders that a title was drawn over.
+	void redraw_boundaries_on_row (int y, int x_begin, int x_end);
+	void redraw_boundaries_on_row (::Wenv::Layout::Grid &grid, std::string path, int y, int x_begin, int x_end);
 
 	// Draw rectangular box with constant border
 	void draw_box (size_t pos, size_t ln, size_t w, size_t h, int btype);
