@@ -163,6 +163,7 @@
     <ClInclude Include="wenv.h" />
     <ClInclude Include="display\Character.h" />
     <ClInclude Include="display\Display.h" />
+    <ClInclude Include="display\Modal.h" />
     <ClInclude Include="display\Window.h" />
   </ItemGroup>
   <ItemGroup>
@@ -185,6 +186,7 @@
     <ClCompile Include="wenv.cpp" />
     <ClCompile Include="display\Character.cpp" />
     <ClCompile Include="display\Display.cpp" />
+    <ClCompile Include="display\Modal.cpp" />
     <ClCompile Include="display\Window.cpp" />
   </ItemGroup>
   <ItemGroup>

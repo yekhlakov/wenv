@@ -1,5 +1,6 @@
 #include "Window.h"
 #include "Display.h"
+#include "Modal.h"
 #include "Palette.h"
 #include "../layout/Grid.h"
 #include "../maxy/control/container.h"
@@ -120,6 +121,19 @@ void Window::initialize ()
         grid->add_block ({ 0, 1, 2, 1 }, -1, nullptr, func_menu);
 
         add_display("file-manager", d);
+
+        // A test modal that is always displayed on top of the display contents
+        auto test_modal = new ::Wenv::Display::Modal {
+            L"Test modal",
+            L"This is a test modal. It is drawn on top of the display contents, centered in the window.",
+            ::Wenv::Display::Palette::Active_element_color,
+            ::Wenv::Display::Palette::Default_color,
+            ::Wenv::Display::Palette::Default_color
+        };
+        test_modal->add_button (L"OK");
+        test_modal->active_button = &test_modal->buttons[0];
+        d->add_modal ("test", test_modal);
+        d->current_modal = test_modal;
     }
 
     //--------------------------------------------------------------------------------------

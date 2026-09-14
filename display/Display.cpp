@@ -3,6 +3,7 @@
 #include <random>
 #include <utility>
 #include "Display.h"
+#include "Modal.h"
 #include "Window.h"
 #include "../Layout/Grid.h"
 #include "../apps/FuncMenu/FuncMenu.h"
@@ -56,6 +57,12 @@ void Display::resize (size_t width, size_t height)
     grid->bake ({ 0, 0, (int) width, (int) height }, buffer, "root");
 
     draw_grid (*grid, "root");
+
+    // The current modal (if any) is drawn on top of the display contents
+    if (current_modal != nullptr)
+    {
+        current_modal->draw (*this);
+    }
 }
 
 // Compute the dimensions of the minimal rectangle (in characters) this text can be printed
@@ -234,7 +241,7 @@ Rect Display::get_min_rectangle (const std::wstring &text, int min_width, int mi
 	return { 0, 0, width, height };
 }
 
-void Display::draw_grid (::Wenv::Layout::Grid &grid, std::string path, ::Wenv::Context * ctx)
+void Display::draw_grid (::Wenv::Layout::Grid &grid, std::string path, ::Wenv::Context * ctx, const std::string &color, bool highlight)
 {
 	// Fall back to the grid own context
 	if (ctx == nullptr)
@@ -242,16 +249,20 @@ void Display::draw_grid (::Wenv::Layout::Grid &grid, std::string path, ::Wenv::C
 		ctx = grid.context;
 	}
 
+	// Draw all the boundaries in the given color so the ambient drawing colors
+	// of the display cannot bleed into the borders
+	with_color (color, highlight);
+
 	// First draw all boundaries
     int bnum = 0;
     for (auto &b : grid.blocks)
     {
         auto bpath = std::format ("{}.{}", path, bnum++);
-        draw_block_boundary (b, bpath);
+        draw_block_boundary (b, bpath, color, highlight);
         if (b.grid != nullptr)
         {
             // If the block has nested grid, recurse
-            draw_grid (*b.grid, bpath, b.get_context (ctx));
+            draw_grid (*b.grid, bpath, b.get_context (ctx), color, highlight);
         }
     }
     
@@ -271,7 +282,7 @@ void Display::draw_grid (::Wenv::Layout::Grid &grid, std::string path, ::Wenv::C
 
 // Redraw the boundaries of those grid blocks that intersect the given display row
 // within the given horizontal span; recurse into nested grids
-void Display::redraw_boundaries_on_row (::Wenv::Layout::Grid &grid, std::string path, int y, int x_begin, int x_end)
+void Display::redraw_boundaries_on_row (::Wenv::Layout::Grid &grid, std::string path, int y, int x_begin, int x_end, const std::string &color)
 {
 	int bnum = 0;
 	for (auto &b : grid.blocks)
@@ -285,20 +296,20 @@ void Display::redraw_boundaries_on_row (::Wenv::Layout::Grid &grid, std::string 
 			continue;
 		}
 
-		draw_block_boundary (b, bpath);
+		draw_block_boundary (b, bpath, color);
 
 		if (b.grid != nullptr)
 		{
-			redraw_boundaries_on_row (*b.grid, bpath, y, x_begin, x_end);
+			redraw_boundaries_on_row (*b.grid, bpath, y, x_begin, x_end, color);
 		}
 	}
 }
 
-void Display::redraw_boundaries_on_row (int y, int x_begin, int x_end)
+void Display::redraw_boundaries_on_row (int y, int x_begin, int x_end, const std::string &color)
 {
 	if (grid != nullptr)
 	{
-		redraw_boundaries_on_row (*grid, "root", y, x_begin, x_end);
+		redraw_boundaries_on_row (*grid, "root", y, x_begin, x_end, color);
 	}
 }
 
@@ -338,6 +349,23 @@ void Display::set_color (int pc, int fg, int bg)
     }
 
     return contexts[n];
+}
+
+::Wenv::Display::Modal *Display::add_modal (const std::string &n, ::Wenv::Display::Modal *m)
+{
+    modals[n] = m;
+
+    return m;
+}
+
+::Wenv::Display::Modal *Display::get_modal (const std::string &n)
+{
+    if (modals.find (n) == modals.end ())
+    {
+        return nullptr;
+    }
+
+    return modals[n];
 }
 
 ::Wenv::Context *Display::get_persistent_context ()

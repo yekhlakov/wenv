@@ -163,13 +163,17 @@ void Display::print_line_v (size_t pos, size_t ln, const std::wstring & s)
 	}
 }
 
-void Display::draw_block_boundary (::Wenv::Layout::Block &b, const std::string & path)
+void Display::draw_block_boundary (::Wenv::Layout::Block &b, const std::string & path, const std::string &color, bool highlight)
 {
 	if (b.btype < 0)
 	{
 		// Borderless blocks
 		return;
 	}
+
+	// Draw the boundary in its own color so the ambient drawing colors of the
+	// display cannot bleed into the borders
+	with_color (color, highlight);
 
 	print_line (b.instances[path].container_dimensions.x, b.instances[path].container_dimensions.y, b.instances[path].top_boundary);
 	print_line_v (b.instances[path].container_dimensions.x, b.instances[path].container_dimensions.y + 1, b.instances[path].left_boundary);
