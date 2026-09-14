@@ -62,7 +62,7 @@ void Display::resize (size_t width, size_t height)
 // into, with word wrapping. Words are placed left to right; when a word does not fit on the
 // current row, the algorithm either widens the rectangle or wraps the word to a new row,
 // picking the option with the smaller (penalized) area.
-Rect Display::get_min_rectangle (const std::wstring &text, int min_width, int min_height, int max_width, int max_height)
+Rect Display::get_min_rectangle (const std::wstring &text, int min_width, int min_height, int max_width, int max_height, std::vector<std::wstring> *out_lines)
 {
 	// Whitespace separator (tabs, spaces and, for safety, carriage returns)
 	auto is_separator = [] (wchar_t ch)
@@ -154,13 +154,28 @@ Rect Display::get_min_rectangle (const std::wstring &text, int min_width, int mi
 		return area;
 	};
 
-	// Place the words one by one
+	// Place the words one by one, remembering the row each word lands on
 	int row = 0;
 	int col = 0;
+	std::vector<std::wstring> wrapped;
 	for (size_t idx = 0; idx < words.size (); ++idx)
 	{
 		auto &[word, li] = words[idx];
 		int len = (int) word.length ();
+
+		// Hard newlines before this word force wraps; empty lines in between produce
+		// empty rows
+		if (idx == 0)
+		{
+			row = li;
+			col = 0;
+		}
+		else if (words[idx - 1].second != li)
+		{
+			row += li - words[idx - 1].second;
+			col = 0;
+			height = (std::max) (height, row + 1);
+		}
 
 		// The word fits on the current row without modifying the width
 		if (col + len <= width)
@@ -190,13 +205,30 @@ Rect Display::get_min_rectangle (const std::wstring &text, int min_width, int mi
 			}
 		}
 
-		// A hard newline before the next word forces a wrap
-		if (idx + 1 < words.size () && words[idx + 1].second != li)
+		// Record the word in its output row: consecutive words on a row are always
+		// separated by a single space
+		if (out_lines != nullptr)
 		{
-			row += 1;
-			col = 0;
-			height = (std::max) (height, row + 1);
+			while ((int) wrapped.size () <= row)
+			{
+				wrapped.push_back (L"");
+			}
+			if (!wrapped[row].empty ())
+			{
+				wrapped[row] += L' ';
+			}
+			wrapped[row] += word;
 		}
+	}
+
+	// Pad the remaining (empty) rows to match the final height
+	if (out_lines != nullptr)
+	{
+		while ((int) wrapped.size () < height)
+		{
+			wrapped.push_back (L"");
+		}
+		*out_lines = std::move (wrapped);
 	}
 
 	return { 0, 0, width, height };

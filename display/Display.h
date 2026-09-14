@@ -78,7 +78,8 @@ struct Display
 	// Compute the dimensions of the minimal rectangle (in characters) this text can be
 	// printed into, with word wrapping. The result may exceed the max limits if the text
 	// forces it; the limits only add a penalty to the area when options are compared.
-	Rect get_min_rectangle (const std::wstring &text, int min_width = 1, int min_height = 1, int max_width = 666, int max_height = 666);
+	// If out_lines is not null, it is populated with the lines of the wrapped text.
+	Rect get_min_rectangle (const std::wstring &text, int min_width = 1, int min_height = 1, int max_width = 666, int max_height = 666, std::vector<std::wstring> *out_lines = nullptr);
 
 	// Print line top to bottom starting from specified position
 	void print_line_v (size_t pos, size_t ln, const std::wstring & s);
