@@ -368,6 +368,47 @@ void Display::set_color (int pc, int fg, int bg)
     return modals[n];
 }
 
+void Display::show_modal
+(
+	const std::string &modal_name,
+	const std::wstring &title,
+	const std::wstring &text,
+	const std::vector<::Wenv::Display::ModalButton> &buttons,
+	const std::string &border_color,
+	const std::string &title_color,
+	const std::string &text_color
+)
+{
+	auto modal = get_modal (modal_name);
+	if (modal == nullptr)
+	{
+		return;
+	}
+
+	// The "modal" context carries the content of the currently shown modal;
+	// the apps attached to its inner blocks read from it
+	auto ctx = get_context ("modal");
+	if (ctx == nullptr)
+	{
+		return;
+	}
+
+	ctx->set ("modal-title", new std::wstring { title });
+	ctx->set ("modal-text", new std::wstring { text });
+	ctx->set ("modal-buttons", new std::vector<::Wenv::Display::ModalButton> { buttons });
+	ctx->set ("modal-border-color", new std::string { border_color });
+	ctx->set ("modal-title-color", new std::string { title_color });
+	ctx->set ("modal-text-color", new std::string { text_color });
+
+	current_modal = modal;
+
+	// Redraw the display so the modal appears on top of the current contents
+	if (window != nullptr && window->container_width > 0 && window->container_height > 0)
+	{
+		resize ((size_t) window->container_width, (size_t) window->container_height);
+	}
+}
+
 ::Wenv::Context *Display::get_persistent_context ()
 {
     if (window == nullptr)

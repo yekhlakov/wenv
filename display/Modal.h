@@ -21,26 +21,19 @@ struct ModalButton
 	ModalButtonAction command;
 };
 
-// A modal box drawn on top of the display contents
+// A modal box drawn on top of the display contents.
+// A modal stores no content: its title, text and buttons are kept in the "modal"
+// context of the display (populated by Display::show_modal), and the contents of
+// its three inner blocks are drawn by the ModalTitle, ModalText and ModalButtons
+// apps attached to them. The modal itself only positions its grid.
 struct Modal
 {
-	// The title shown in the top block
-	std::wstring title;
-
-	// The text shown in the middle block
-	std::wstring text;
-
-	// Palette color names used to draw the border, the title and the text
-	// (always drawn in their highlight versions)
+	// Fallback palette color names used to draw the border, the title and the text
+	// (always drawn in their highlight versions); the values from the "modal"
+	// context take precedence when present
 	std::string border_color;
 	std::string title_color;
 	std::string text_color;
-
-	// The buttons shown in the bottom block
-	std::vector<ModalButton> buttons;
-
-	// The button considered active (nullptr = none)
-	ModalButton *active_button = nullptr;
 
 	// The grid of this modal: a 1x1 outer grid with a single double-bordered block
 	// hiding a 3x1 inner grid of single-bordered blocks (title, text, buttons)
@@ -50,17 +43,14 @@ struct Modal
 	::Wenv::Layout::Grid *inner_grid = nullptr;
 
 	Modal (
-		const std::wstring &title,
-		const std::wstring &text,
+		::Wenv::Apps::App *title_app,
+		::Wenv::Apps::App *text_app,
+		::Wenv::Apps::App *buttons_app,
 		const std::string &border_color = ::Wenv::Display::Palette::Active_element_color,
 		const std::string &title_color = ::Wenv::Display::Palette::Default_color,
 		const std::string &text_color = ::Wenv::Display::Palette::Default_color
 	);
 	~Modal ();
-
-	// Append a button and return it. The active button must be assigned after all
-	// buttons are added (the buttons vector may reallocate on insertion)
-	ModalButton *add_button (const std::wstring &text, ModalButtonAction command = {});
 
 	// Draw the modal centered on top of the display contents
 	void draw (::Wenv::Display::Display &display);

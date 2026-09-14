@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <vector>
 #include "Character.h"
+#include "Modal.h"
 #include "Palette.h"
 #include "..\Types.h"
 
@@ -52,6 +53,18 @@ struct Display
 	::Wenv::Context *get_context (const std::string &n);
 	::Wenv::Display::Modal *add_modal (const std::string &n, ::Wenv::Display::Modal *m);
 	::Wenv::Display::Modal *get_modal (const std::string &n);
+
+	// Put the given title, text and buttons into the "modal" context, mark the
+	// named modal as the current one and redraw the display
+	void show_modal (
+		const std::string &modal_name,
+		const std::wstring &title,
+		const std::wstring &text,
+		const std::vector<::Wenv::Display::ModalButton> &buttons,
+		const std::string &border_color = ::Wenv::Display::Palette::Active_element_color,
+		const std::string &title_color = ::Wenv::Display::Palette::Default_color,
+		const std::string &text_color = ::Wenv::Display::Palette::Default_color
+	);
 
 	// Get the global context shared across all displays (owned by the window)
 	::Wenv::Context *get_persistent_context ();

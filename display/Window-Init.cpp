@@ -14,6 +14,10 @@
 #include "../apps/FileEditor/FileEditor.h"
 #include "../apps/FileEditor/FileEditorStatusBar.h"
 
+#include "../apps/Modal/ModalTitle.h"
+#include "../apps/Modal/ModalText.h"
+#include "../apps/Modal/ModalButtons.h"
+
 namespace Wenv::Display
 {
 
@@ -122,18 +126,31 @@ void Window::initialize ()
 
         add_display("file-manager", d);
 
-        // A test modal that is always displayed on top of the display contents
+        // The modal box slots: the apps attached to its grid blocks draw the
+        // modal title, the modal text and the modal buttons from the shared
+        // "modal" context, so the modal itself carries no content
+        d->add_context (new ::Wenv::Context { "modal" });
+        auto modal_title = d->add_app (new ::Wenv::Apps::ModalTitle { L"modal-title" });
+        auto modal_text = d->add_app (new ::Wenv::Apps::ModalText { L"modal-text" });
+        auto modal_buttons = d->add_app (new ::Wenv::Apps::ModalButtons { L"modal-buttons" });
+
         auto test_modal = new ::Wenv::Display::Modal {
+            modal_title,
+            modal_text,
+            modal_buttons
+        };
+        d->add_modal ("test", test_modal);
+
+        // A test modal that is always displayed on top of the display contents
+        std::vector<::Wenv::Display::ModalButton> buttons {
+            { L"OK", nullptr }
+        };
+        d->show_modal (
+            "test",
             L"Test modal",
             L"This is a test modal. It is drawn on top of the display contents, centered in the window.",
-            ::Wenv::Display::Palette::Active_element_color,
-            ::Wenv::Display::Palette::Default_color,
-            ::Wenv::Display::Palette::Default_color
-        };
-        test_modal->add_button (L"OK");
-        test_modal->active_button = &test_modal->buttons[0];
-        d->add_modal ("test", test_modal);
-        d->current_modal = test_modal;
+            buttons
+        );
     }
 
     //--------------------------------------------------------------------------------------
