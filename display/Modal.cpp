@@ -22,7 +22,8 @@ Modal::Modal
 	title_color { title_color },
 	text_color { text_color },
 	grid { new ::Wenv::Layout::Grid {} },
-	inner_grid { new ::Wenv::Layout::Grid {} }
+	inner_grid { new ::Wenv::Layout::Grid {} },
+	apps { title_app, text_app, buttons_app }
 {
 	// The outer grid is a single cell with a double border hiding the inner grid
 	grid->add_row (0, 0, 100);

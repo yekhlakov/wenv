@@ -42,6 +42,10 @@ struct Modal
 	// The inner grid of the modal (owned along with the outer grid)
 	::Wenv::Layout::Grid *inner_grid = nullptr;
 
+	// The apps that draw the modal contents. While the modal is visible the
+	// window forwards every keypress to all of them
+	std::vector<::Wenv::Apps::App *> apps;
+
 	Modal (
 		::Wenv::Apps::App *title_app,
 		::Wenv::Apps::App *text_app,

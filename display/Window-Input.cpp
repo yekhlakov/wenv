@@ -11,6 +11,37 @@ void Window::handle_keydown (WPARAM wParam, LPARAM lParam)
 {
 	key_state[wParam] = true;
 
+	if (current_display->current_modal != nullptr)
+	{
+		// While a modal is visible every keypress goes to the modal apps
+		// only; the apps of the underlying layouts receive none of them
+		auto ctx = current_display->get_context ("modal");
+
+		if (ctx != nullptr)
+		{
+			int mods = 0;
+
+			if (key_state[VK_CONTROL])
+			{
+				mods |= 1;
+			}
+			if (key_state[VK_SHIFT])
+			{
+				mods |= 2;
+			}
+			if (key_state[VK_MENU])
+			{
+				mods |= 4;
+			}
+			for (auto app : current_display->current_modal->apps)
+			{
+				app->with_context (ctx)->keypress (wParam, mods);
+			}
+		}
+		draw (hdc);
+		return;
+	}
+
 	if (wParam == VK_ESCAPE && display_stack.size () > 1)
 	{
 		pop_display ();

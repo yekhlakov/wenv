@@ -396,6 +396,8 @@ void Display::show_modal
 	ctx->set ("modal-title", new std::wstring { title });
 	ctx->set ("modal-text", new std::wstring { text });
 	ctx->set ("modal-buttons", new std::vector<::Wenv::Display::ModalButton> { buttons });
+	// The first button is the active one when the modal appears
+	ctx->set ("modal-active-button", new int { 0 });
 	ctx->set ("modal-border-color", new std::string { border_color });
 	ctx->set ("modal-title-color", new std::string { title_color });
 	ctx->set ("modal-text-color", new std::string { text_color });
