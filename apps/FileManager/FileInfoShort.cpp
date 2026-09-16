@@ -31,6 +31,14 @@ void FileInfoShort::redraw (const std::string &path)
 	auto pwd = current_context->get<std::wstring> ("pwd");
 	auto selected_file_idx = get_selected_file_idx (current_context, *pwd);
 
+	// The selected index is shared with the file lists, whose lists may have
+	// changed; an index outside the list would be an out-of-bounds read
+	if (lst == nullptr || lst->empty () ||
+		*selected_file_idx < 0 || *selected_file_idx >= (int) lst->size ())
+	{
+		return;
+	}
+
 	auto fd = (*lst)[*selected_file_idx];
 
 	SYSTEMTIME st;

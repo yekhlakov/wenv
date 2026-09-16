@@ -66,7 +66,7 @@ public:
 
 	virtual void draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area) override;
 	virtual void redraw (const std::string &path) override;
-	virtual void click (::Wenv::Display::Rect client_area, int modifiers) override;
+	virtual bool click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers) override;
 	virtual void keypress (unsigned int key, int modifiers) override;
 
 	// Redraw all apps sharing the current context

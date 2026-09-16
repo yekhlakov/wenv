@@ -205,8 +205,9 @@ void FileEditor::redraw (const std::string &path)
 	}
 }
 
-void FileEditor::click (::Wenv::Display::Rect client_area, int modifiers)
+bool FileEditor::click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers)
 {
+	return false;
 }
 
 void FileEditor::keypress (unsigned int key, int modifiers)

@@ -178,6 +178,17 @@ public:
 		return a;
 	}
 
+	// Store a pointer to a shared long-lived object (e.g. an app) without
+	// taking ownership of it: replacing the slot does NOT delete the previous
+	// value, which may still be referenced from other contexts
+	template<typename A>
+	A * put (const std::string & n, A * a)
+	{
+		stored[n] = { typeid(A).hash_code (), (int *) a };
+
+		return a;
+	}
+
 	void erase (const std::string &n)
 	{
 		stored.erase (n);

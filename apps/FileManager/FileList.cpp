@@ -305,8 +305,49 @@ void FileList::redraw(const std::string &path)
 	}
 }
 
-void FileList::click (::Wenv::Display::Rect client_area, int modifiers)
+bool FileList::click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers)
 {
+	// Focus this panel so the selection highlight and keypresses follow the click.
+	// The focused app is a long-lived shared object, so it is stored without
+	// ownership (Context::put) - Context::set would delete the previous app
+	current_display->focused_app = this;
+	current_display->focused_context = current_context;
+	current_context->put ("focused-app", this);
+
+	auto pwd = current_context->get<std::wstring> ("pwd");
+	auto sort_mode = current_context->get<int> ("sort-mode", [] () { return new int { 0 }; });
+	auto sorted_lst = current_context->get<File_list_type> ("sorted-list");
+	auto idx = get_selected_file_idx (current_context, *pwd);
+	auto list_offset = current_context->get<int> ("list-offset", [] () { return new int { 0 }; });
+	auto list_size = client_area.height - 1;
+
+	if (position.y == 0 && name[0] != L'2')
+	{
+		// The sort-mode indication is drawn on the first row of the leftmost
+		// column; toggling it flips between ascending and descending
+		*sort_mode ^= 1;
+		current_context->erase ("sorted-list");
+	}
+	else if (position.y >= 1 && position.y - 1 < list_size)
+	{
+		// Compute the visible slice of the sorted list: the left panel starts
+		// at list_offset, the right panel one list_size further down
+		auto p_begin = *list_offset;
+		if (name[0] == L'2')
+		{
+			p_begin += list_size;
+		}
+
+		auto file_idx = p_begin + position.y - 1;
+
+		if (sorted_lst != nullptr && file_idx < (int) sorted_lst->size ())
+		{
+			*idx = file_idx;
+		}
+	}
+
+	// The display redraws the whole screen when a click is handled
+	return true;
 }
 
 void FileList::keypress (unsigned int key, int modifiers)

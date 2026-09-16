@@ -48,7 +48,15 @@ void Window::handle_keydown (WPARAM wParam, LPARAM lParam)
 		return;
 	}
 
-	auto focused_app = current_display->focused_context->get<::Wenv::Apps::App> ("focused-app");
+	auto focused_context = current_display->focused_context;
+
+	if (focused_context == nullptr)
+	{
+		// No context has focus - ignore the keypress
+		return;
+	}
+
+	auto focused_app = focused_context->get<::Wenv::Apps::App> ("focused-app");
 
 	if (focused_app != nullptr)
 	{
@@ -66,7 +74,7 @@ void Window::handle_keydown (WPARAM wParam, LPARAM lParam)
 		{
 			mods |= 4;
 		}
-		focused_app->with_context (current_display->focused_context)->keypress (wParam, mods);
+		focused_app->with_context (focused_context)->keypress (wParam, mods);
 	}
 	draw (hdc);
 }
@@ -82,6 +90,43 @@ void Window::handle_mousemove (WPARAM wParam, LPARAM lParam)
 	mouse_x = LOWORD (lParam);
 	mouse_y = HIWORD (lParam);
 	draw (hdc);
+}
+
+void Window::handle_mouse_click (WPARAM wParam, LPARAM lParam)
+{
+	if (current_display == nullptr || char_width <= 0 || char_height <= 0)
+	{
+		return;
+	}
+
+	// Keep the left button pressed-state table in sync with the up event
+	key_state[VK_LBUTTON] = true;
+
+	// The click position in pixels converted to character cells
+	auto x = LOWORD (lParam) / char_width;
+	auto y = HIWORD (lParam) / char_height;
+
+	// Modifier state: 1 = Ctrl, 2 = Shift, 4 = Alt (the mouse messages report
+	// only the first two; alt is read from the pressed-key table)
+	int mods = 0;
+
+	if (wParam & MK_CONTROL)
+	{
+		mods |= 1;
+	}
+	if (wParam & MK_SHIFT)
+	{
+		mods |= 2;
+	}
+	if (key_state[VK_MENU])
+	{
+		mods |= 4;
+	}
+
+	if (current_display->handle_mouse_click (x, y, mods))
+	{
+		draw (hdc);
+	}
 }
 
 bool Window::get_key_state (int key) const

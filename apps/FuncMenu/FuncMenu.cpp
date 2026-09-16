@@ -134,8 +134,9 @@ void FuncMenu::redraw (const std::string &path)
 	current_display->with_color (::Wenv::Display::Palette::Default_color);
 }
 
-void FuncMenu::click (::Wenv::Display::Rect client_area, int modifiers)
+bool FuncMenu::click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers)
 {
+	return false;
 }
 
 void FuncMenu::keypress (unsigned int key, int modifiers)

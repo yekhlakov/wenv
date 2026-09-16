@@ -74,6 +74,29 @@ struct Display
 	// The current pressed state of the given key (proxied to the window)
 	bool get_key_state (int key) const;
 
+	// A hit test result: the app under a point, the context it must be shown
+	// with and the client area of the block that holds it
+	struct App_hit
+	{
+		::Wenv::Apps::App *app = nullptr;
+		::Wenv::Context *context = nullptr;
+		std::string path;
+		Rect client_area { 0, 0, 0, 0 };
+
+		explicit operator bool () const { return app != nullptr; }
+	};
+
+	// Handle a mouse click at the given character coordinates. When a modal is
+	// visible only the apps of the modal are examined, otherwise the apps of the
+	// current layout; a click on a border is ignored. Returns true when an app
+	// handled the click and the whole screen must be redrawn
+	bool handle_mouse_click (int x, int y, int modifiers);
+
+	// Find the app (and its client area) the given point falls into within the
+	// given grid, recursing into nested grids. Empty when the point hits no app
+	// (a border or the space between blocks)
+	App_hit find_app_at (::Wenv::Layout::Grid &grid, const std::string &path, int x, int y, ::Wenv::Context *ctx = nullptr);
+
 	Display (const std::wstring &n);
 	~Display ();
 

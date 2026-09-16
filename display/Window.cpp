@@ -299,7 +299,7 @@ LRESULT CALLBACK Window::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM 
         break;
 
     case WM_LBUTTONDOWN:
-        pWindow->handle_keydown (VK_LBUTTON, 0);
+        pWindow->handle_mouse_click (wParam, lParam);
         break;
     case WM_RBUTTONDOWN:
         pWindow->handle_keydown (VK_RBUTTON, 0);

@@ -68,6 +68,7 @@ struct Window {
     void handle_keydown (WPARAM wParam, LPARAM lParam);
     void handle_keyup (WPARAM wParam, LPARAM lParam);
     void handle_mousemove (WPARAM wParam, LPARAM lParam);
+    void handle_mouse_click (WPARAM wParam, LPARAM lParam);
 
     // The current pressed state of the given key
     bool get_key_state (int key) const;
