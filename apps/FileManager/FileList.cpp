@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <map>
 #include <regex>
 #include <Shlwapi.h>
 #include <Windows.h>
@@ -125,6 +126,24 @@ bool is_executable_file (const std::wstring &filename)
 	return std::regex_search (filename, pattern);
 }
 
+std::string FileList::get_sort_mode_name (int sort_mode)
+{
+	// Dictionary of the sort mode indication strings
+	static const std::map<int, std::string> sort_mode_names
+	{
+		{ SORT_MODE_NAME,			"(↑Name)" },
+		{ SORT_MODE_REVERSE_NAME,	"(↓Name)" },
+		{ SORT_MODE_SIZE,			"(↑Size)" },
+		{ SORT_MODE_REVERSE_SIZE,	"(↓Size)" },
+		{ SORT_MODE_DATE,			"(↑Date)" },
+		{ SORT_MODE_REVERSE_DATE,	"(↓Date)" }
+	};
+
+	auto it = sort_mode_names.find (sort_mode);
+
+	return it != sort_mode_names.end () ? it->second : std::string {};
+}
+
 void FileList::draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area)
 {
 	App::draw (display, path, client_area);
@@ -150,7 +169,9 @@ void FileList::redraw(const std::string &path)
 	*selected_file_idx = min ((int) sorted_lst->size () - 1, *selected_file_idx);
 	*selected_file_idx = max (0, *selected_file_idx);
 
-	auto list_size = current_client_area.height;
+	// The top line is reserved for the sort mode indication. The remaining
+	// rows hold the file entries, so the list size is one row shorter
+	auto list_size = current_client_area.height - 1;
 
 	if (*selected_file_idx < *list_offset)
 	{
@@ -160,6 +181,34 @@ void FileList::redraw(const std::string &path)
 	else if (*selected_file_idx >= *list_offset + 2 * list_size)
 	{
 		*list_offset = *selected_file_idx - 2 * list_size + 1;
+	}
+
+	// The sort mode indication is printed centered and highlighted only in the
+	// leftmost column; the top line in the other columns is kept empty so all
+	// the file lists have the same height
+	::Wenv::Display::Rect sort_rect = current_client_area;
+	sort_rect.height = 1;
+
+	if (name[0] == L'2')
+	{
+		// Non-leftmost column: just an empty top line
+		current_display->print_line
+		(
+			sort_rect,
+			L" ",
+			current_display->PF_LEFT | current_display->PF_ERASE_BACKGROUND
+		);
+	}
+	else
+	{
+		// Active (regular) color for the sort mode indication
+		current_display->with_color (::Wenv::Display::Palette::Active_element_color);
+		current_display->print_line
+		(
+			sort_rect,
+			maxy::strings::utf8towchar (get_sort_mode_name (*sort_mode)),
+			current_display->PF_CENTER | current_display->PF_ERASE_BACKGROUND
+		);
 	}
 
 	::Wenv::Display::Rect fn_rect = current_client_area;
@@ -214,7 +263,8 @@ void FileList::redraw(const std::string &path)
 			current_display->with_color (color);
 		}
 
-		fn_rect.y = current_client_area.y + p - p_begin;
+		// Skip the top line reserved for the sort mode indication
+		fn_rect.y = current_client_area.y + 1 + p - p_begin;
 
 		if (fn_rect.y - current_client_area.y >= current_client_area.height)
 		{
@@ -240,10 +290,10 @@ void FileList::redraw(const std::string &path)
 
 	current_display->with_color (::Wenv::Display::Palette::Default_color);
 
-	// Clear the remains
-	while (p - p_begin < current_client_area.height)
+	// Clear the remains of the skipped top line and the list area
+	while (p - p_begin < current_client_area.height - 1)
 	{
-		fn_rect.y = current_client_area.y + p - p_begin;
+		fn_rect.y = current_client_area.y + 1 + p - p_begin;
 		current_display->print_line
 		(
 			fn_rect,
@@ -266,7 +316,8 @@ void FileList::keypress (unsigned int key, int modifiers)
 	auto lst = current_context->get<File_list_type> ("sorted-list");
 	auto path = *current_context->get<std::string> ("focused-path");
 
-	auto list_size = client_areas[path].height;
+	// The top line of the client area shows the sort indication
+	auto list_size = client_areas[path].height - 1;
 
 	if (modifiers & 1) // control
 	{

@@ -10,6 +10,9 @@ public:
 
 	FileList (const std::wstring &n) : App { n } {}
 
+	// The display string for the given sort mode, e.g. "(↑Name)"
+	static std::string get_sort_mode_name (int sort_mode);
+
 	// Func menu wants all keypresses
 	virtual bool wants_all_keypresses () override { return true; }
 
