@@ -307,12 +307,23 @@ void FileList::redraw(const std::string &path)
 
 bool FileList::click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers)
 {
-	// Focus this panel so the selection highlight and keypresses follow the click.
-	// The focused app is a long-lived shared object, so it is stored without
-	// ownership (Context::put) - Context::set would delete the previous app
-	current_display->focused_app = this;
-	current_display->focused_context = current_context;
-	current_context->put ("focused-app", this);
+	auto path = *current_context->get<std::string> ("focused-path");
+
+	if (current_display->focused_context != current_context)
+	{
+		// Steal the focus if needed
+		auto target_context = current_context;
+		auto old_context = current_display->focused_context;
+		
+		// Temporarily set the old context and redraw (to reflect loss of focus)
+		with_context (old_context);
+		current_display->focused_context = nullptr;
+		redraw_all (*old_context->get<std::string> ("focused-path"));
+		// Then set the new context
+		current_display->focused_context = target_context;
+		with_context (target_context);
+		// the redraw with "new" context will occur later
+	}
 
 	auto pwd = current_context->get<std::wstring> ("pwd");
 	auto sort_mode = current_context->get<int> ("sort-mode", [] () { return new int { 0 }; });
@@ -347,6 +358,8 @@ bool FileList::click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos po
 	}
 
 	// The display redraws the whole screen when a click is handled
+	redraw_all (path);
+
 	return true;
 }
 

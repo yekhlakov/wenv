@@ -529,6 +529,7 @@ bool Display::handle_mouse_click (int x, int y, int modifiers)
 	// The click may have changed app state (selection, sort mode, focus); redraw
 	// the whole display so the result is visible everywhere. The modal, when
 	// present, is drawn on top of the display contents (as in the resize path)
+	/*
 	if (handled)
 	{
 		if (grid != nullptr)
@@ -541,6 +542,7 @@ bool Display::handle_mouse_click (int x, int y, int modifiers)
 			current_modal->draw (*this);
 		}
 	}
+	*/
 
 	return handled;
 }
