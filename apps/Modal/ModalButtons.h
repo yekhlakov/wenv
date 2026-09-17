@@ -11,12 +11,17 @@ namespace Wenv::Apps
 // the "modal" context and draws each button as "[ TEXT ]", centered
 // horizontally. The active button is highlighted; the others use the default
 // colors. The keys navigate between the buttons (left/right arrows and tab,
-// cycling around) and enter activates the active button.
+// cycling around) and enter activates the active button. A click on a button
+// activates that button, even when it is not the currently active one.
 class ModalButtons : public App
 {
 	// The buttons row is redrawn from its own client area when the active
 	// button moves, so the area is kept here instead of resolving a path
 	::Wenv::Display::Rect own_area;
+
+	// Activate the button with the given index as if enter was pressed while it
+	// was active: its command is run, the modal is closed and the display redrawn
+	void activate (int index);
 
 public:
 	ModalButtons (const std::wstring &n) : App { n } {}
@@ -27,6 +32,9 @@ public:
 	// Responds to navigation keys and to enter; the core forwards every
 	// keypress to this app while its modal is visible
 	virtual void keypress (unsigned int key, int modifiers) override;
+
+	// A click on a button activates it (even when it is not the active one)
+	virtual bool click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers) override;
 };
 
 } // namespace Wenv::Apps

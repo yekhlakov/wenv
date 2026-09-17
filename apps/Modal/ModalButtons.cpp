@@ -115,22 +115,87 @@ void ModalButtons::keypress (unsigned int key, int modifiers)
 	{
 		// The active button closes the modal, runs its command (if any)
 		// and the display is redrawn without the modal on top
-		auto command = (*buttons)[*active].command;
-
-		current_display->current_modal = nullptr;
-
-		if (command)
-		{
-			command (current_display);
-		}
-
-		auto window = current_display->window;
-		if (window != nullptr && window->container_width > 0 && window->container_height > 0)
-		{
-			// Re-bake the (possibly changed) display so the modal disappears
-			window->current_display->resize ((size_t) window->container_width, (size_t) window->container_height);
-		}
+		activate (*active);
 	}
+}
+
+// Activate the button with the given index as if enter was pressed while it
+// was active: its command is run, the modal is closed and the display redrawn
+void ModalButtons::activate (int index)
+{
+	if (current_display == nullptr || current_context == nullptr)
+	{
+		return;
+	}
+
+	auto buttons = current_context->get<std::vector<::Wenv::Display::ModalButton>> ("modal-buttons");
+	if (buttons == nullptr || index < 0 || index >= (int) buttons->size ())
+	{
+		return;
+	}
+
+	// Make the activated button the active one so a later redraw highlights it
+	auto active = current_context->get<int> ("modal-active-button", [] () { return new int { 0 }; });
+	*active = index;
+
+	auto command = (*buttons)[index].command;
+
+	// Close the modal before running the command so the command observes the
+	// display without the modal on top
+	current_display->current_modal = nullptr;
+
+	if (command)
+	{
+		command (current_display);
+	}
+
+	auto window = current_display->window;
+	if (window != nullptr && window->container_width > 0 && window->container_height > 0)
+	{
+		// Re-bake the (possibly changed) display so the modal disappears
+		window->current_display->resize ((size_t) window->container_width, (size_t) window->container_height);
+	}
+}
+
+bool ModalButtons::click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers)
+{
+	if (current_display == nullptr || current_context == nullptr || client_area.width < 1)
+	{
+		return false;
+	}
+
+	auto buttons = current_context->get<std::vector<::Wenv::Display::ModalButton>> ("modal-buttons");
+	if (buttons == nullptr || buttons->empty ())
+	{
+		return false;
+	}
+
+	// The buttons are drawn centered on the single row of the client area, each
+	// as "[ TEXT ]" (width + 4) followed by a one-character gap; recompute those
+	// spans so the click can be matched against them
+	auto total_width = 0;
+	for (auto &button : *buttons)
+	{
+		total_width += (int) button.text.length () + 4;
+	}
+	total_width += (int) buttons->size () - 1;
+
+	auto x = (client_area.width - total_width) / 2;
+	for (size_t i = 0; i < buttons->size (); i++)
+	{
+		auto width = (int) (*buttons)[i].text.length () + 4;
+
+		if (position.x >= x && position.x < x + width)
+		{
+			// A hit on any button activates it, even when it was not active
+			activate ((int) i);
+			return true;
+		}
+
+		x += width + 1;
+	}
+
+	return false;
 }
 
 } // namespace Wenv::Apps
