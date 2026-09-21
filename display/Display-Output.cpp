@@ -161,6 +161,133 @@ void Display::print_line (Rect container, const std::wstring &s, int flags)
 	}
 }
 
+
+
+std::vector<std::vector<std::wstring>> split_text_into_lines_and_words (const std::wstring & text, size_t & max_line_width)
+{
+
+	// Whitespace separator (tabs, spaces and, for safety, carriage returns)
+	auto is_separator = [] (wchar_t ch)
+	{
+		return ch == L' ' || ch == L'\t' || ch == L'\r';
+	};
+
+	std::vector<std::vector<std::wstring>> split_text;
+
+		size_t pos = 0;
+
+		while (true)
+		{
+
+			size_t next = text.find (L'\n', pos);
+			if (next == std::wstring::npos)
+			{
+				// whole text until the end is a single line
+				next = text.length ();
+			}
+
+			auto llen = next - pos;
+
+			auto line = text.substr (pos, llen);
+
+
+			auto max_word_length = 0;
+
+			{
+				std::vector<std::wstring> words;
+
+				auto lpos = 0;
+				auto word_start = llen;
+				auto line_width = 0;
+
+				while (lpos < llen)
+				{
+					while (lpos < llen && is_separator (line[lpos]))
+					{
+						// skip whitespace before the word
+						lpos++;
+					}
+
+					word_start = lpos;
+
+					while (lpos < llen && !is_separator (line[lpos]))
+					{
+						// find the word end
+						lpos++;
+					}
+
+
+					auto word_length = lpos - word_start;
+
+					if (word_start != lpos)
+					{
+						// the word is non-empty: add it to the vector
+						words.push_back (line.substr (word_start, word_length));
+					}
+
+					max_word_length = max (max_word_length, word_length);
+					line_width += word_length
+
+					lpos++;
+				}
+
+				split_text.push_back (words);
+
+				max_line_width = max (max_line_width, line_width + words.size() == 0 ? 0 : words.size() - 1);
+			}
+		}
+
+	return split_text;	
+}
+
+
+std::list<std::list<std::wstring&>> produce_word_wrapped_text (std::vector<std::vector<std::wstring>> & split_text, int max_width, int max_height, size_t & max_line_w)
+{
+	std::list<std::list<std::wstring&>> wrapped_text;
+
+		max_line_w = 0;
+
+		for (auto & line : split_text)
+		{
+			std::list<std::wstring &>> current_line;
+
+			auto line_w = 0;
+
+			size_t insert = 0;
+			for (auto & word : line)
+			{
+				if (line_w + insert + word.size() <= current_w)
+				{
+					current_line.push_back(word);
+					line_w += insert + word.size ();
+				}
+				else
+				{
+					wrapped_text.push_back (current_line);
+
+					current_line.erase();
+
+					current_line.push_back(word);
+					line_w = word.size ();
+				}
+
+				max_line_w = max (max_line_w, line_w);
+
+				insert = 1;
+			}
+
+			wrapped_text.push_back (current_line);
+		}
+
+	return wrapped_text;
+}
+
+
+float evaluate_wrapping (size_t w, size_t h)
+{
+}
+
+
 // Compute the dimensions of the minimal rectangle (in characters) this text can be printed
 // into, with word wrapping. Words are placed left to right; when a word does not fit on the
 // current row, the algorithm either widens the rectangle or wraps the word to a new row,
@@ -172,6 +299,59 @@ Rect Display::get_min_rectangle (const std::wstring &text, int min_width, int mi
 	{
 		return ch == L' ' || ch == L'\t' || ch == L'\r';
 	};
+
+	                                                  1
+	// The text is split into lines each of which is split into words
+	auto max_line_width = 0;
+	auto split_text = split_text_into_lines_and_words (text, max_line_width);
+
+
+	// Main loop
+
+	auto current_w = min (max_line_width, max_width);
+	auto current_h = split_text.size ();
+
+	bool is_previous_valid = false;
+	std::list<std::list<std::wstring&>> previous_wrapped_text;
+
+	float previous_evaluation = 1e9;
+
+	while (true)
+	{
+		// check if we are ok with the current dimensions
+
+		// Produce the word-wrapped text
+		size_t max_wrapped_line_width = 0;
+		auto wrapped_text = produce_word_wrapped_text (split_text, current_w, max_wrapped_line_width) 
+
+		// the text block area is max_wrapped_line_width * wrapped_text.size ();
+
+		if (wrapped_text.size () >= max_height)
+		{
+			// can't change the width anymore
+			if (is_previous_valid)
+			{
+				// use previous
+			}
+			else
+			{
+				// use this
+			}
+		}
+
+		// Check if we've reached our best fit
+
+		float current_evaluation = evaluate_wrapping (max_wrapped_line_width, wrapped_text.size());
+
+
+		
+	}	
+
+
+
+	
+
+
 
 	// Split the text into lines (hard newlines) and trim each of them
 	std::vector<std::wstring> lines;
@@ -205,6 +385,9 @@ Rect Display::get_min_rectangle (const std::wstring &text, int min_width, int mi
 			pos = next + 1;
 		}
 	}
+
+
+
 
 	// Split the text into words (runs of non-separator characters), remembering the line
 	// each word belongs to: a hard newline forces a wrap no matter how much space is left

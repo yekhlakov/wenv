@@ -178,6 +178,7 @@
     <ClCompile Include="apps\Modal\ModalText.cpp" />
     <ClCompile Include="apps\Modal\ModalTitle.cpp" />
     <ClCompile Include="display\Display-Output.cpp" />
+    <ClCompile Include="display\Display-Input.cpp" />
     <ClCompile Include="display\Palette.cpp" />
     <ClCompile Include="display\Window-Init.cpp" />
     <ClCompile Include="display\Window-Input.cpp" />

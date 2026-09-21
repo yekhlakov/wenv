@@ -98,6 +98,9 @@
     <ClCompile Include="display\Display-Output.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
+    <ClCompile Include="display\Display-Input.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
     <ClCompile Include="display\Display.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>

@@ -72,7 +72,7 @@ void ModalButtons::redraw (const std::string &path)
 		current_display->with_color
 		(
 			is_active ? ::Wenv::Display::Palette::Active_element_color : ::Wenv::Display::Palette::Default_color,
-			is_active
+			false
 		);
 		current_display->print_line (x, own_area.y, labels[i]);
 
