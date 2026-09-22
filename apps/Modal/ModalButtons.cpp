@@ -84,17 +84,17 @@ void ModalButtons::redraw (const std::string &path)
 	current_display->with_color (::Wenv::Display::Palette::Default_color);
 }
 
-void ModalButtons::keypress (unsigned int key, int modifiers)
+bool ModalButtons::handle_keydown (unsigned int key, int modifiers)
 {
 	if (current_display == nullptr || current_context == nullptr)
 	{
-		return;
+		return false;
 	}
 
 	auto buttons = current_context->get<std::vector<::Wenv::Display::ModalButton>> ("modal-buttons");
 	if (buttons == nullptr || buttons->empty ())
 	{
-		return;
+		return false;
 	}
 
 	auto active = current_context->get<int> ("modal-active-button", [] () { return new int { 0 }; });
@@ -104,19 +104,24 @@ void ModalButtons::keypress (unsigned int key, int modifiers)
 		// Activate the next button, cycling around the list
 		*active = (*active + 1) % (int) buttons->size ();
 		redraw ("");
+		return true;
 	}
 	else if (key == VK_LEFT)
 	{
 		// Activate the previous button, cycling around the list
 		*active = (*active + (int) buttons->size () - 1) % (int) buttons->size ();
 		redraw ("");
+		return true;
 	}
 	else if (key == VK_RETURN)
 	{
 		// The active button closes the modal, runs its command (if any)
 		// and the display is redrawn without the modal on top
 		activate (*active);
+		return true;
 	}
+
+	return false;
 }
 
 // Activate the button with the given index as if enter was pressed while it
@@ -157,7 +162,7 @@ void ModalButtons::activate (int index)
 	}
 }
 
-bool ModalButtons::click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers)
+bool ModalButtons::handle_click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers)
 {
 	if (current_display == nullptr || current_context == nullptr || client_area.width < 1)
 	{

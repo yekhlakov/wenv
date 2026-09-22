@@ -134,16 +134,16 @@ void FuncMenu::redraw (const std::string &path)
 	current_display->with_color (::Wenv::Display::Palette::Default_color);
 }
 
-bool FuncMenu::click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers)
+bool FuncMenu::handle_click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers)
 {
 	return false;
 }
 
-void FuncMenu::keypress (unsigned int key, int modifiers)
+bool FuncMenu::handle_keydown (unsigned int key, int modifiers)
 {
 	if (current_display == nullptr || current_context == nullptr)
 	{
-		return;
+		return false;
 	}
 
 	// Run the command bound to the pressed function key, if any.
@@ -154,15 +154,22 @@ void FuncMenu::keypress (unsigned int key, int modifiers)
 	{
 		active_commands[key - VK_F1].action (current_display, current_context);
 		redraw_all ();
-		return;
+		return true;
 	}
 
 	// Then propagate to focused app
 	auto focused_app = current_display->focused_context->get<::Wenv::Apps::App> ("focused-app");
 	if (focused_app != nullptr)
 	{
-		focused_app->with_context (current_display->focused_context)->keypress (key, modifiers);
+		return focused_app->with_context (current_display->focused_context)->handle_keydown (key, modifiers);
 	}
+
+	return false;
+}
+
+bool FuncMenu::handle_keyup (unsigned int key, int modifiers)
+{
+	return false;
 }
 
 void FuncMenu::redraw_all ()

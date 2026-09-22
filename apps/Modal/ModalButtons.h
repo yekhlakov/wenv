@@ -31,10 +31,10 @@ public:
 
 	// Responds to navigation keys and to enter; the core forwards every
 	// keypress to this app while its modal is visible
-	virtual void keypress (unsigned int key, int modifiers) override;
+	virtual bool handle_keydown (unsigned int key, int modifiers) override;
 
 	// A click on a button activates it (even when it is not the active one)
-	virtual bool click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers) override;
+	virtual bool handle_click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers) override;
 };
 
 } // namespace Wenv::Apps

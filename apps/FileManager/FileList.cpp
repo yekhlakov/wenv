@@ -305,7 +305,7 @@ void FileList::redraw(const std::string &path)
 	}
 }
 
-bool FileList::click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers)
+bool FileList::handle_click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers)
 {
 	auto path = *current_context->get<std::string> ("focused-path");
 
@@ -363,7 +363,7 @@ bool FileList::click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos po
 	return true;
 }
 
-void FileList::keypress (unsigned int key, int modifiers)
+bool FileList::handle_keydown (unsigned int key, int modifiers)
 {
 	auto pwd = current_context->get<std::wstring> ("pwd");
 	auto idx = get_selected_file_idx (current_context, *pwd);
@@ -384,6 +384,14 @@ void FileList::keypress (unsigned int key, int modifiers)
 				*sort_mode ^= 1;
 				current_context->erase ("sorted-list");
 			}
+			else
+			{
+				return false;
+			}
+		}
+		else
+		{
+			return false;
 		}
 	}
 	else if (key == VK_DOWN)
@@ -434,6 +442,10 @@ void FileList::keypress (unsigned int key, int modifiers)
 			current_context->erase ("list");
 			current_context->erase ("sorted-list");
 		}
+		else
+		{
+			return false;
+		}
 	}
 	else if (key == VK_TAB)
 	{
@@ -450,7 +462,7 @@ void FileList::keypress (unsigned int key, int modifiers)
 		current_display->focused_context = current_display->get_context (target_context);
 		with_context (current_display->focused_context);
 		redraw_all (*current_display->focused_context->get<std::string>("focused-path"));
-		return;
+		return true;
 	}
 	else if (key == VK_F3 || key == VK_F4)
 	{
@@ -467,11 +479,17 @@ void FileList::keypress (unsigned int key, int modifiers)
 			*edit_pwd = *current_context->get<std::wstring> ("pwd");
 
 			current_display->window->set_display ("file-editor");
-			return;
+			return true;
 		}
+	}
+	else
+	{
+		return false;
 	}
 
 	redraw_all (path);
+
+	return true;
 }
 
 void FileList::redraw_all (const std::string & path)

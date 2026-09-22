@@ -18,8 +18,8 @@ public:
 
 	virtual void draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area) override;
 	virtual void redraw (const std::string &path) override;
-	virtual bool click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers) override;
-	virtual void keypress (unsigned int key, int modifiers) override;
+	virtual bool handle_click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers) override;
+	virtual bool handle_keydown (unsigned int key, int modifiers) override;
 
 	void redraw_all (const std::string &path);
 

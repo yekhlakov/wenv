@@ -47,10 +47,17 @@ public:
 	// The core calls this function when the app gets clicked. The position is
 	// relative to the client area top-left. The function must return true when
 	// the click changed the app state and the whole screen must be redrawn
-	virtual bool click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers) { return false; }
+	virtual bool handle_click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers) { return false; }
 
-	// The core calls this function when the user presses a key AND the app is in focus
-	virtual void keypress (unsigned int key, int modifiers) {}
+	// The core calls this function when the user presses a key AND the app is in
+	// focus. Returns false when the event was a no-op; true when it changed the
+	// app state and a redraw of the app is needed
+	virtual bool handle_keydown (unsigned int key, int modifiers) { return false; }
+
+	// The core calls this function when the user releases a key AND the app is in
+	// focus. Returns false when the event was a no-op; true when it changed the
+	// app state and a redraw of the app is needed
+	virtual bool handle_keyup (unsigned int key, int modifiers) { return false; }
 
 	virtual ::Wenv::Display::Rect get_client_area (const std::string &path);
 };

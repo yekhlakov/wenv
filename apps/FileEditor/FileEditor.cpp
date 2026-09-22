@@ -205,16 +205,16 @@ void FileEditor::redraw (const std::string &path)
 	}
 }
 
-bool FileEditor::click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers)
+bool FileEditor::handle_click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers)
 {
 	return false;
 }
 
-void FileEditor::keypress (unsigned int key, int modifiers)
+bool FileEditor::handle_keydown (unsigned int key, int modifiers)
 {
 	if (current_context == nullptr)
 	{
-		return;
+		return false;
 	}
 
 	auto path = *current_context->get<std::string> ("focused-path");
@@ -225,7 +225,7 @@ void FileEditor::keypress (unsigned int key, int modifiers)
 	auto pwd = current_context->get<std::wstring> ("edit-pwd");
 	if (target == nullptr || pwd == nullptr)
 	{
-		return;
+		return false;
 	}
 
 	auto full_path = *pwd;
@@ -267,11 +267,13 @@ void FileEditor::keypress (unsigned int key, int modifiers)
 	}
 	else
 	{
-		return;
+		return false;
 	}
 
 	// The offsets are clamped to the content bounds during redraw
 	redraw_all (path);
+
+	return true;
 }
 
 void FileEditor::redraw_all (const std::string &path)

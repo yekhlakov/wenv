@@ -7,42 +7,59 @@
 namespace Wenv::Display
 {
 
+// The current modifier state: 1 = Ctrl, 2 = Shift, 4 = Alt
+int Window::current_mods () const
+{
+	int mods = 0;
+
+	if (key_state[VK_CONTROL])
+	{
+		mods |= 1;
+	}
+	if (key_state[VK_SHIFT])
+	{
+		mods |= 2;
+	}
+	if (key_state[VK_MENU])
+	{
+		mods |= 4;
+	}
+
+	return mods;
+}
+
 void Window::handle_keydown (WPARAM wParam, LPARAM lParam)
 {
 	key_state[wParam] = true;
+	dispatch_key_event (wParam, current_mods (), true);
+}
 
+void Window::handle_keyup (WPARAM wParam, LPARAM lParam)
+{
+	key_state[wParam] = false;
+	dispatch_key_event (wParam, current_mods (), false);
+}
+
+// Dispatch a key press or key release to the apps of the display: while a modal
+// is visible every event goes to the modal apps only, otherwise to the focused
+// app (if any). Escape pops the display, but only when pressed (not on release)
+void Window::dispatch_key_event (WPARAM wParam, int mods, bool pressed)
+{
 	if (current_display->current_modal != nullptr)
 	{
-		// While a modal is visible every keypress goes to the modal apps
+		// While a modal is visible every key event goes to the modal apps
 		// only; the apps of the underlying layouts receive none of them
 		auto ctx = current_display->get_context ("modal");
 
 		if (ctx != nullptr)
 		{
-			int mods = 0;
-
-			if (key_state[VK_CONTROL])
-			{
-				mods |= 1;
-			}
-			if (key_state[VK_SHIFT])
-			{
-				mods |= 2;
-			}
-			if (key_state[VK_MENU])
-			{
-				mods |= 4;
-			}
-			for (auto app : current_display->current_modal->apps)
-			{
-				app->with_context (ctx)->keypress (wParam, mods);
-			}
+			forward_key_to_apps (current_display->current_modal->apps, ctx, wParam, mods, pressed);
 		}
 		draw (hdc);
 		return;
 	}
 
-	if (wParam == VK_ESCAPE && display_stack.size () > 1)
+	if (pressed && wParam == VK_ESCAPE && display_stack.size () > 1)
 	{
 		pop_display ();
 		return;
@@ -52,7 +69,7 @@ void Window::handle_keydown (WPARAM wParam, LPARAM lParam)
 
 	if (focused_context == nullptr)
 	{
-		// No context has focus - ignore the keypress
+		// No context has focus - ignore the key event
 		return;
 	}
 
@@ -60,29 +77,32 @@ void Window::handle_keydown (WPARAM wParam, LPARAM lParam)
 
 	if (focused_app != nullptr)
 	{
-		int mods = 0;
-
-		if (key_state[VK_CONTROL])
-		{
-			mods |= 1;
-		}
-		if (key_state[VK_SHIFT])
-		{
-			mods |= 2;
-		}
-		if (key_state[VK_MENU])
-		{
-			mods |= 4;
-		}
-		focused_app->with_context (focused_context)->keypress (wParam, mods);
+		forward_key_to_apps ({ focused_app }, focused_context, wParam, mods, pressed);
 	}
 	draw (hdc);
 }
 
-void Window::handle_keyup (WPARAM wParam, LPARAM lParam)
+// Call the keydown or keyup handler of each app, bound to the given context
+void Window::forward_key_to_apps (
+	const std::vector<::Wenv::Apps::App *> &apps,
+	::Wenv::Context *ctx,
+	WPARAM wParam,
+	int mods,
+	bool pressed)
 {
-	key_state[wParam] = false;
-	draw (hdc);
+	for (auto app : apps)
+	{
+		app->with_context (ctx);
+
+		if (pressed)
+		{
+			app->handle_keydown (wParam, mods);
+		}
+		else
+		{
+			app->handle_keyup (wParam, mods);
+		}
+	}
 }
 
 void Window::handle_mousemove (WPARAM wParam, LPARAM lParam)

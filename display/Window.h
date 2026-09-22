@@ -9,6 +9,10 @@ namespace Wenv {
 class Context;
 }
 
+namespace Wenv::Apps {
+class App;
+}
+
 namespace Wenv::Layout {
 struct Grid;
 }
@@ -69,6 +73,21 @@ struct Window {
     void handle_keyup (WPARAM wParam, LPARAM lParam);
     void handle_mousemove (WPARAM wParam, LPARAM lParam);
     void handle_mouse_click (WPARAM wParam, LPARAM lParam);
+
+    // The current modifier state: 1 = Ctrl, 2 = Shift, 4 = Alt
+    int current_mods () const;
+
+    // Dispatch a key press or key release to the apps: while a modal is visible
+    // every event goes to the modal apps only, otherwise to the focused app
+    void dispatch_key_event (WPARAM wParam, int mods, bool pressed);
+
+    // Call the keydown or keyup handler of each app, bound to the given context
+    void forward_key_to_apps (
+        const std::vector<::Wenv::Apps::App *> &apps,
+        ::Wenv::Context *ctx,
+        WPARAM wParam,
+        int mods,
+        bool pressed);
 
     // The current pressed state of the given key
     bool get_key_state (int key) const;

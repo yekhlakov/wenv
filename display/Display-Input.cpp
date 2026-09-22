@@ -117,7 +117,7 @@ bool Display::handle_mouse_click (int x, int y, int modifiers)
 	// The position of the click within the app's client area
 	Pos position { x - hit.client_area.x, y - hit.client_area.y };
 
-	auto handled = hit.app->with_context (hit.context)->click (hit.client_area, position, modifiers);
+	auto handled = hit.app->with_context (hit.context)->handle_click (hit.client_area, position, modifiers);
 
 	// The click handler may have changed app state (selection, sort mode,
 	// focus); the caller redraws the whole display when the click was handled
