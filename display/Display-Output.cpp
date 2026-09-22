@@ -191,7 +191,7 @@ std::vector<std::vector<std::wstring>> split_text_into_lines_and_words (const st
 			auto line = text.substr (pos, llen);
 
 
-			auto max_word_length = 0;
+			size_t max_word_length = 0;
 
 			{
 				std::vector<std::wstring> words;
@@ -225,15 +225,15 @@ std::vector<std::vector<std::wstring>> split_text_into_lines_and_words (const st
 						words.push_back (line.substr (word_start, word_length));
 					}
 
-					max_word_length = max (max_word_length, word_length);
-					line_width += word_length
+					max_word_length = std::max (max_word_length, word_length);
+					line_width += word_length;
 
 					lpos++;
 				}
 
 				split_text.push_back (words);
 
-				max_line_width = max (max_line_width, line_width + words.size() == 0 ? 0 : words.size() - 1);
+				max_line_width = std::max (max_line_width, line_width + words.size() == 0 ? 0 : words.size() - 1);
 			}
 		}
 
@@ -241,37 +241,37 @@ std::vector<std::vector<std::wstring>> split_text_into_lines_and_words (const st
 }
 
 
-std::list<std::list<std::wstring&>> produce_word_wrapped_text (std::vector<std::vector<std::wstring>> & split_text, int max_width, int max_height, size_t & max_line_w)
+std::list<std::list<std::wstring*>> produce_word_wrapped_text (std::vector<std::vector<std::wstring>> & split_text, int max_width, int max_height, size_t & max_line_w)
 {
-	std::list<std::list<std::wstring&>> wrapped_text;
+	std::list<std::list<std::wstring*>> wrapped_text;
 
 		max_line_w = 0;
 
 		for (auto & line : split_text)
 		{
-			std::list<std::wstring &>> current_line;
+			std::list<std::wstring *> current_line;
 
-			auto line_w = 0;
+			size_t line_w = 0;
 
 			size_t insert = 0;
 			for (auto & word : line)
 			{
-				if (line_w + insert + word.size() <= current_w)
+				if (line_w + insert + word.size() <= max_width)
 				{
-					current_line.push_back(word);
+					current_line.push_back (&word);
 					line_w += insert + word.size ();
 				}
 				else
 				{
 					wrapped_text.push_back (current_line);
 
-					current_line.erase();
+					current_line.clear ();
 
-					current_line.push_back(word);
+					current_line.push_back (&word);
 					line_w = word.size ();
 				}
 
-				max_line_w = max (max_line_w, line_w);
+				max_line_w = std::max (max_line_w, line_w);
 
 				insert = 1;
 			}
@@ -285,6 +285,7 @@ std::list<std::list<std::wstring&>> produce_word_wrapped_text (std::vector<std::
 
 float evaluate_wrapping (size_t w, size_t h)
 {
+	return 0.0f;
 }
 
 
@@ -300,7 +301,8 @@ Rect Display::get_min_rectangle (const std::wstring &text, int min_width, int mi
 		return ch == L' ' || ch == L'\t' || ch == L'\r';
 	};
 
-	                                                  1
+
+	/*
 	// The text is split into lines each of which is split into words
 	auto max_line_width = 0;
 	auto split_text = split_text_into_lines_and_words (text, max_line_width);
@@ -346,7 +348,7 @@ Rect Display::get_min_rectangle (const std::wstring &text, int min_width, int mi
 
 		
 	}	
-
+	*/
 
 
 	
