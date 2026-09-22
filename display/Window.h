@@ -81,8 +81,9 @@ struct Window {
     // every event goes to the modal apps only, otherwise to the focused app
     void dispatch_key_event (WPARAM wParam, int mods, bool pressed);
 
-    // Call the keydown or keyup handler of each app, bound to the given context
-    void forward_key_to_apps (
+    // Call the keydown or keyup handler of each app, bound to the given context,
+    // until an app consumes the event. Returns whether the event was consumed
+    bool forward_key_to_apps (
         const std::vector<::Wenv::Apps::App *> &apps,
         ::Wenv::Context *ctx,
         WPARAM wParam,

@@ -183,6 +183,26 @@ void Window::initialize ()
         grid->context->set ("status-bar", status);
 	grid->context->set ("func-menu", func_menu);
 
+	// The default command list of the editor: F10 exits the current display
+	// (or the whole application when it is the only one left)
+	auto default_commands = new std::vector<::Wenv::Apps::FuncMenuCommand> (12);
+	(*default_commands)[9] = {
+		L"Exit",
+
+		[] (::Wenv::Display::Display *display, ::Wenv::Context *)
+		{
+			if (!display->window->pop_display ())
+			{
+				DestroyWindow (display->window->hwnd);
+			}
+			else
+			{
+				display->window->draw (display->window->hdc);
+			}
+		}
+	};
+	grid->context->set ("func_menu.default", default_commands);
+
         d->grid = grid;
 
         add_display ("file-editor", d);

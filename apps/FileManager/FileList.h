@@ -13,7 +13,7 @@ public:
 	// The display string for the given sort mode, e.g. "(↑Name)"
 	static std::string get_sort_mode_name (int sort_mode);
 
-	// Func menu wants all keypresses
+	// The file list wants all keypresses
 	virtual bool wants_all_keypresses () override { return true; }
 
 	virtual void draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area) override;

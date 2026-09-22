@@ -270,21 +270,6 @@ LRESULT CALLBACK Window::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM 
 
     case WM_SYSKEYDOWN:
 
-        if (wParam == VK_F10)
-        {
-            // Shortcut to kill the application
-            if (!pWindow->pop_display ())
-            {
-                DestroyWindow (hWnd);
-            }
-            else
-            {
-                pWindow->draw (pWindow->hdc);
-            }
-
-            break;
-        }
-        
         if (wParam == VK_SHIFT)
         {
             // Alt+Shift switches keyboard layout

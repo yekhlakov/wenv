@@ -41,8 +41,10 @@ void Window::handle_keyup (WPARAM wParam, LPARAM lParam)
 }
 
 // Dispatch a key press or key release to the apps of the display: while a modal
-// is visible every event goes to the modal apps only, otherwise to the focused
-// app (if any). Escape pops the display, but only when pressed (not on release)
+// is visible every event goes to the modal apps only, otherwise the event is
+// forwarded to the apps that want all keypresses (e.g. the func menu) and then
+// to the focused app (if any). Escape pops the display, but only when pressed
+// (not on release)
 void Window::dispatch_key_event (WPARAM wParam, int mods, bool pressed)
 {
 	if (current_display->current_modal != nullptr)
@@ -73,6 +75,14 @@ void Window::dispatch_key_event (WPARAM wParam, int mods, bool pressed)
 		return;
 	}
 
+	// The event goes to the apps that want every keypress first; once one of
+	// them consumes it, the focused app gets nothing
+	if (forward_key_to_apps (current_display->listening_apps, focused_context, wParam, mods, pressed))
+	{
+		draw (hdc);
+		return;
+	}
+
 	auto focused_app = focused_context->get<::Wenv::Apps::App> ("focused-app");
 
 	if (focused_app != nullptr)
@@ -82,8 +92,9 @@ void Window::dispatch_key_event (WPARAM wParam, int mods, bool pressed)
 	draw (hdc);
 }
 
-// Call the keydown or keyup handler of each app, bound to the given context
-void Window::forward_key_to_apps (
+// Call the keydown or keyup handler of each app, bound to the given context,
+// until an app consumes the event. Returns whether the event was consumed
+bool Window::forward_key_to_apps (
 	const std::vector<::Wenv::Apps::App *> &apps,
 	::Wenv::Context *ctx,
 	WPARAM wParam,
@@ -94,15 +105,16 @@ void Window::forward_key_to_apps (
 	{
 		app->with_context (ctx);
 
-		if (pressed)
+		bool consumed = pressed ? app->handle_keydown (wParam, mods)
+		                         : app->handle_keyup (wParam, mods);
+
+		if (consumed)
 		{
-			app->handle_keydown (wParam, mods);
-		}
-		else
-		{
-			app->handle_keyup (wParam, mods);
+			return true;
 		}
 	}
+
+	return false;
 }
 
 void Window::handle_mousemove (WPARAM wParam, LPARAM lParam)
