@@ -1,7 +1,7 @@
 #pragma once
-#include <array>
 #include <functional>
 #include <string>
+#include <vector>
 #include "../App.h"
 
 namespace Wenv::Apps
@@ -31,35 +31,24 @@ enum class FuncMenuCommandList
 
 // The func menu bar at the bottom of the screen.
 // It shows the labels of the commands attached to the F1..F12 keys.
+// The commands are stored in the current context under "func_menu.<list>"
+// elements; missing lists are empty.
 class FuncMenu : public App
 {
-	// Per-modifier command lists. One slot per function key (F1 .. F12);
-	// unbound slots are empty.
-	std::array<FuncMenuCommand, 12> commands;
-	std::array<FuncMenuCommand, 12> ctrl_commands;
-	std::array<FuncMenuCommand, 12> alt_commands;
-	std::array<FuncMenuCommand, 12> shift_commands;
-	std::array<FuncMenuCommand, 12> ctrl_shift_commands;
-	std::array<FuncMenuCommand, 12> ctrl_alt_commands;
-
 	// The func menu is shared between the displays, so it keeps its own client
 	// area instead of resolving it from a caller-supplied path
 	::Wenv::Display::Rect own_area;
 
-	// Pick the command list for the given modifier combination
-	std::array<FuncMenuCommand, 12> &get_command_list (FuncMenuCommandList list);
+	// Fetch the command list for the given modifier combination from the
+	// current context. A missing context or a missing element yields an
+	// empty list.
+	std::vector<FuncMenuCommand> &get_list (FuncMenuCommandList list);
 
 public:
 	FuncMenu (const std::wstring &n) : App { n } {}
 
 	// Func menu wants all keypresses
 	virtual bool wants_all_keypresses () override { return true; }
-
-	// Bind the given command to a function key (number 1 .. 12) of the given list
-	void set_command (int number, const std::wstring &name, FuncMenuAction action, FuncMenuCommandList list = FuncMenuCommandList::Default);
-
-	// Unbind the given function key (number 1 .. 12) of the given list
-	void erase_command (int number, FuncMenuCommandList list = FuncMenuCommandList::Default);
 
 	// Determine the command list that corresponds to the currently pressed modifiers
 	FuncMenuCommandList get_active_command_list () const;

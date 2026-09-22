@@ -8,38 +8,37 @@
 namespace Wenv::Apps
 {
 
-std::array<FuncMenuCommand, 12> &FuncMenu::get_command_list (FuncMenuCommandList list)
+// The name of the current-context element that holds the command list of the
+// given modifier combination
+static const char * command_list_name (FuncMenuCommandList list)
 {
 	switch (list)
 	{
-	case FuncMenuCommandList::Ctrl: return ctrl_commands;
-	case FuncMenuCommandList::Alt: return alt_commands;
-	case FuncMenuCommandList::Shift: return shift_commands;
-	case FuncMenuCommandList::CtrlShift: return ctrl_shift_commands;
-	case FuncMenuCommandList::CtrlAlt: return ctrl_alt_commands;
-	default: return commands;
+	case FuncMenuCommandList::Ctrl: return "func_menu.ctrl";
+	case FuncMenuCommandList::Alt: return "func_menu.alt";
+	case FuncMenuCommandList::Shift: return "func_menu.shift";
+	case FuncMenuCommandList::CtrlShift: return "func_menu.ctrl_shift";
+	case FuncMenuCommandList::CtrlAlt: return "func_menu.ctrl_alt";
+	default: return "func_menu.default";
 	}
 }
 
-void FuncMenu::set_command (int number, const std::wstring &name, FuncMenuAction action, FuncMenuCommandList list)
+std::vector<FuncMenuCommand> &FuncMenu::get_list (FuncMenuCommandList list)
 {
-	if (number < 1 || number > 12)
+	// A missing context means the menu shows the bare function key numbers
+	static std::vector<FuncMenuCommand> empty;
+
+	if (current_context == nullptr)
 	{
-		// The func menu only has slots for the F1..F12 keys
-		return;
+		return empty;
 	}
 
-	get_command_list (list)[number - 1] = FuncMenuCommand { name, std::move (action) };
-}
-
-void FuncMenu::erase_command (int number, FuncMenuCommandList list)
-{
-	if (number < 1 || number > 12)
-	{
-		return;
-	}
-
-	get_command_list (list)[number - 1] = FuncMenuCommand {};
+	// The command list is read from the current context; a missing element
+	// is an empty list
+	return *current_context->get<std::vector<FuncMenuCommand>> (
+		command_list_name (list),
+		[] { return new std::vector<FuncMenuCommand> {}; }
+	);
 }
 
 FuncMenuCommandList FuncMenu::get_active_command_list () const
@@ -106,27 +105,28 @@ void FuncMenu::redraw (const std::string &path)
 
 	auto slot_width = own_area.width / 12;
 
-	// Show the commands of the list matching the currently pressed modifiers
-	auto &active_commands = get_command_list (get_active_command_list ());
+	// Show the commands of the list matching the currently pressed modifiers,
+	// read from the current context
+	auto &active_commands = get_list (get_active_command_list ());
 
-	for (size_t i = 0; i < active_commands.size (); i++)
+	for (size_t i = 0; i < 12; i++)
 	{
-		auto &command = active_commands[i];
 		auto number_text = std::format (L"{}", i + 1);
+		auto has_command = i < active_commands.size () && !active_commands[i].name.empty ();
 
 		// The label is centered within the key slot
-		auto label = command.name.empty () ? number_text : number_text + L" " + command.name;
+		auto label = has_command ? number_text + L" " + active_commands[i].name : number_text;
 		auto start_x = own_area.x + (int) i * slot_width + (slot_width - (int) label.size ()) / 2;
 
 		// The function key number is drawn in the active color
 		current_display->with_color (::Wenv::Display::Palette::Active_element_color);
 		current_display->print_line (start_x, own_area.y, number_text);
 
-		if (!command.name.empty ())
+		if (has_command)
 		{
 			// The command name is drawn highlighted right after the number
 			current_display->with_color (::Wenv::Display::Palette::Default_color, true);
-			current_display->print_line (start_x + (int) number_text.size () + 1, own_area.y, command.name);
+			current_display->print_line (start_x + (int) number_text.size () + 1, own_area.y, active_commands[i].name);
 		}
 	}
 
@@ -147,14 +147,20 @@ bool FuncMenu::handle_keydown (unsigned int key, int modifiers)
 	}
 
 	// Run the command bound to the pressed function key, if any.
-	// The command comes from the list of the currently pressed modifiers.
-	auto &active_commands = get_command_list (get_active_command_list ());
+	// The command comes from the list of the currently pressed modifiers,
+	// read from the current context.
+	auto &active_commands = get_list (get_active_command_list ());
 
-	if (key >= VK_F1 && key <= VK_F12 && active_commands[key - VK_F1].action)
+	if (key >= VK_F1 && key <= VK_F12)
 	{
-		active_commands[key - VK_F1].action (current_display, current_context);
-		redraw_all ();
-		return true;
+		auto index = key - VK_F1;
+
+		if (index < active_commands.size () && active_commands[index].action)
+		{
+			active_commands[index].action (current_display, current_context);
+			redraw_all ();
+			return true;
+		}
 	}
 
 	// Then propagate to focused app
