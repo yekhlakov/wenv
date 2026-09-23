@@ -16,10 +16,8 @@ void ModalText::draw (::Wenv::Display::Display &display, const std::string &path
 		return;
 	}
 
-	auto text = current_context->get<std::wstring> ("modal-text");
-	auto color = current_context->get<std::string> ("modal-text-color");
-
-	auto clr = color ? *color : std::string { ::Wenv::Display::Palette::Default_color };
+	auto text = get_text ();
+	auto clr = *get_text_color ();
 
 	// Fill the client area with the highlight background
 	current_display->with_color (clr, true);
@@ -40,6 +38,19 @@ void ModalText::draw (::Wenv::Display::Display &display, const std::string &path
 	{
 		current_display->print_line (client_area.x, client_area.y + i, wrapped_lines[i]);
 	}
+}
+
+std::wstring * ModalText::get_text ()
+{
+	// The text is provided by the module that shows the modal; a missing
+	// value simply leaves the text block empty
+	return current_context->get<std::wstring> ("modal-text");
+}
+
+std::string * ModalText::get_text_color ()
+{
+	// Default: the normal text color, also used for the highlighted fill
+	return current_context->get<std::string> ("modal-text-color", [] () { return new std::string { ::Wenv::Display::Palette::Default_color }; });
 }
 
 } // namespace Wenv::Apps

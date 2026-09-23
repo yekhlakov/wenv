@@ -30,9 +30,9 @@ void FileEditorStatusBar::redraw (const std::string &path)
 	}
 
 	auto area = get_client_area (path);
-	auto target = current_context->get<std::wstring> ("edit-target");
-	auto pwd = current_context->get<std::wstring> ("edit-pwd");
-	auto file = current_context->get<File> ("file");
+	auto target = get_edit_target ();
+	auto pwd = get_edit_pwd ();
+	auto file = get_file ();
 
 	if (target == nullptr || pwd == nullptr)
 	{
@@ -46,11 +46,8 @@ void FileEditorStatusBar::redraw (const std::string &path)
 	}
 	full_path += *target;
 
-	auto per_file_key_top = std::string { "top-line:" } + maxy::strings::wchartoutf8 (full_path);
-	auto per_file_key_left = std::string { "left-col:" } + maxy::strings::wchartoutf8 (full_path);
-	auto per_ctx = current_display->get_persistent_context ();
-	auto top = per_ctx->get<int> (per_file_key_top, [] () { return new int {}; });
-	auto left = per_ctx->get<int> (per_file_key_left, [] () { return new int {}; });
+	auto top = get_file_top_line (full_path);
+	auto left = get_file_left_column (full_path);
 
 	// Right-aligned information
 	std::wstring right;
@@ -98,6 +95,44 @@ void FileEditorStatusBar::redraw (const std::string &path)
 		right,
 		current_display->PF_TOP | current_display->PF_RIGHT
 	);
+}
+
+std::wstring * FileEditorStatusBar::get_edit_target ()
+{
+	// No default can be provided for this parameter because it is set
+	// from outside (the file manager) when the editor is opened
+	return current_context->get<std::wstring> ("edit-target");
+}
+
+std::wstring * FileEditorStatusBar::get_edit_pwd ()
+{
+	// No default can be provided for this parameter because it is set
+	// from outside (the file manager) together with edit-target
+	return current_context->get<std::wstring> ("edit-pwd");
+}
+
+File * FileEditorStatusBar::get_file ()
+{
+	// No default: the file is loaded and stored by the editor itself; the
+	// bar only appends the file details when one is actually loaded
+	return current_context->get<File> ("file");
+}
+
+int * FileEditorStatusBar::get_file_top_line (const std::wstring &full_path)
+{
+	// The per-file viewport is kept in the persistent context under a key
+	// derived from the file path; a freshly opened file starts at the top
+	auto per_file_key = std::string { "top-line:" } + maxy::strings::wchartoutf8 (full_path);
+
+	return current_display->get_persistent_context ()->get<int> (per_file_key, [] () { return new int { 0 }; });
+}
+
+int * FileEditorStatusBar::get_file_left_column (const std::wstring &full_path)
+{
+	// A freshly opened file starts at the leftmost column
+	auto per_file_key = std::string { "left-col:" } + maxy::strings::wchartoutf8 (full_path);
+
+	return current_display->get_persistent_context ()->get<int> (per_file_key, [] () { return new int { 0 }; });
 }
 
 }

@@ -185,20 +185,33 @@ void FuncMenu::redraw_all ()
 		return;
 	}
 
-	auto apps = current_context->get<std::vector<App *>> ("app-group");
+	auto apps = get_app_group ();
 	if (apps == nullptr)
 	{
 		return;
 	}
 
 	// Redraw the apps using the path of the currently focused app
-	auto focused_path = current_context->get<std::string> ("focused-path");
+	auto focused_path = get_focused_path ();
 	auto path = focused_path != nullptr ? *focused_path : std::string {};
 
 	for (auto app : *apps)
 	{
 		app->with_context (current_context)->redraw (path);
 	}
+}
+
+std::vector<App *> * FuncMenu::get_app_group ()
+{
+	// No default: a missing group simply means there are no apps to redraw
+	return current_context->get<std::vector<App *>> ("app-group");
+}
+
+std::string * FuncMenu::get_focused_path ()
+{
+	// Set by the core when the display is built; a missing value simply
+	// leaves the redraw with an empty path
+	return current_context->get<std::string> ("focused-path");
 }
 
 }

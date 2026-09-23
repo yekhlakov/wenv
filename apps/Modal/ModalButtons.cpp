@@ -28,17 +28,15 @@ void ModalButtons::redraw (const std::string &path)
 		return;
 	}
 
-	auto buttons = current_context->get<std::vector<::Wenv::Display::ModalButton>> ("modal-buttons");
-	auto color = current_context->get<std::string> ("modal-border-color");
-	auto active = current_context->get<int> ("modal-active-button", [] () { return new int { 0 }; });
-
-	auto clr = color ? *color : std::string { ::Wenv::Display::Palette::Active_element_color };
+	auto buttons = get_buttons ();
+	auto clr = *get_border_color ();
+	auto active = get_active_button ();
 
 	// Fill the client area with the highlight background
 	current_display->with_color (clr, true);
 	current_display->print_line (own_area, L"", current_display->PF_ERASE_BACKGROUND);
 
-	if (buttons == nullptr || buttons->empty ())
+	if (buttons->empty ())
 	{
 		return;
 	}
@@ -91,13 +89,13 @@ bool ModalButtons::handle_keydown (unsigned int key, int modifiers)
 		return false;
 	}
 
-	auto buttons = current_context->get<std::vector<::Wenv::Display::ModalButton>> ("modal-buttons");
-	if (buttons == nullptr || buttons->empty ())
+	auto buttons = get_buttons ();
+	if (buttons->empty ())
 	{
 		return false;
 	}
 
-	auto active = current_context->get<int> ("modal-active-button", [] () { return new int { 0 }; });
+	auto active = get_active_button ();
 
 	if (key == VK_RIGHT || key == VK_TAB)
 	{
@@ -133,14 +131,14 @@ void ModalButtons::activate (int index)
 		return;
 	}
 
-	auto buttons = current_context->get<std::vector<::Wenv::Display::ModalButton>> ("modal-buttons");
-	if (buttons == nullptr || index < 0 || index >= (int) buttons->size ())
+	auto buttons = get_buttons ();
+	if (index < 0 || index >= (int) buttons->size ())
 	{
 		return;
 	}
 
 	// Make the activated button the active one so a later redraw highlights it
-	auto active = current_context->get<int> ("modal-active-button", [] () { return new int { 0 }; });
+	auto active = get_active_button ();
 	*active = index;
 
 	auto command = (*buttons)[index].command;
@@ -169,8 +167,8 @@ bool ModalButtons::handle_click (::Wenv::Display::Rect client_area, ::Wenv::Disp
 		return false;
 	}
 
-	auto buttons = current_context->get<std::vector<::Wenv::Display::ModalButton>> ("modal-buttons");
-	if (buttons == nullptr || buttons->empty ())
+	auto buttons = get_buttons ();
+	if (buttons->empty ())
 	{
 		return false;
 	}
@@ -201,6 +199,24 @@ bool ModalButtons::handle_click (::Wenv::Display::Rect client_area, ::Wenv::Disp
 	}
 
 	return false;
+}
+
+std::vector<::Wenv::Display::ModalButton> * ModalButtons::get_buttons ()
+{
+	// Default: an empty button row, so the app has nothing to draw
+	return current_context->get<std::vector<::Wenv::Display::ModalButton>> ("modal-buttons", [] () { return new std::vector<::Wenv::Display::ModalButton> {}; });
+}
+
+std::string * ModalButtons::get_border_color ()
+{
+	// Default: the active color, used for the highlighted border and bar
+	return current_context->get<std::string> ("modal-border-color", [] () { return new std::string { ::Wenv::Display::Palette::Active_element_color }; });
+}
+
+int * ModalButtons::get_active_button ()
+{
+	// Default: the first button
+	return current_context->get<int> ("modal-active-button", [] () { return new int { 0 }; });
 }
 
 } // namespace Wenv::Apps

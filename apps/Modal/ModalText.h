@@ -11,6 +11,10 @@ namespace Wenv::Apps
 // wraps the text to fit the client area, and draws the wrapped lines.
 class ModalText : public App
 {
+	// The per-parameter accessors to the current context (see the .cpp)
+	std::wstring * get_text ();
+	std::string * get_text_color ();
+
 public:
 	ModalText (const std::wstring &n) : App { n } {}
 

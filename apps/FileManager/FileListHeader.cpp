@@ -14,7 +14,7 @@ void FileListHeader::draw (::Wenv::Display::Display &display, const std::string 
 
 void FileListHeader::redraw (const std::string &path)
 {
-	auto pwd = current_context->get<std::wstring> ("pwd");
+	auto pwd = get_pwd ();
 	auto ca = get_client_area (path);
 
 	// The directory name is drawn across the box boundary of the panel, so restore
@@ -28,6 +28,13 @@ void FileListHeader::redraw (const std::string &path)
 		L" " + *pwd + L" ",
 		current_display->PF_CENTER
 	);
+}
+
+std::wstring * FileListHeader::get_pwd ()
+{
+	// No default can be provided for this parameter because it is set
+	// from outside (the core) when the display is built
+	return current_context->get<std::wstring> ("pwd");
 }
 
 }

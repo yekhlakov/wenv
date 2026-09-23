@@ -44,6 +44,10 @@ class FuncMenu : public App
 	// empty list.
 	std::vector<FuncMenuCommand> &get_list (FuncMenuCommandList list);
 
+	// The per-parameter accessors to the current context (see the .cpp)
+	std::vector<App *> * get_app_group ();
+	std::string * get_focused_path ();
+
 public:
 	FuncMenu (const std::wstring &n) : App { n } {}
 

@@ -1,6 +1,8 @@
 #pragma once
 
 #include <string>
+#include <vector>
+#include "../../display/Modal.h"
 #include "../App.h"
 
 namespace Wenv::Apps
@@ -18,6 +20,11 @@ class ModalButtons : public App
 	// The buttons row is redrawn from its own client area when the active
 	// button moves, so the area is kept here instead of resolving a path
 	::Wenv::Display::Rect own_area;
+
+	// The per-parameter accessors to the current context (see the .cpp)
+	std::vector<::Wenv::Display::ModalButton> * get_buttons ();
+	std::string * get_border_color ();
+	int * get_active_button ();
 
 	// Activate the button with the given index as if enter was pressed while it
 	// was active: its command is run, the modal is closed and the display redrawn

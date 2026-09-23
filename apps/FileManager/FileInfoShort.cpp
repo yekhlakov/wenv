@@ -27,8 +27,8 @@ void FileInfoShort::draw (::Wenv::Display::Display &display, const std::string &
 void FileInfoShort::redraw (const std::string &path)
 {
 	auto current_client_area = get_client_area (path);
-	auto lst = current_context->get<std::vector<WIN32_FIND_DATAW>> ("sorted-list");
-	auto pwd = current_context->get<std::wstring> ("pwd");
+	auto lst = get_sorted_file_list ();
+	auto pwd = get_pwd ();
 	auto selected_file_idx = get_selected_file_idx (current_context, *pwd);
 
 	// The selected index is shared with the file lists, whose lists may have
@@ -67,6 +67,20 @@ void FileInfoShort::redraw (const std::string &path)
 		std::format(L"{}  {:4}-{:02}-{:02} {:02}:{:02}", i, lt.wYear, lt.wMonth, lt.wDay, lt.wHour, lt.wMinute),
 		current_display->PF_RIGHT
 	);
+}
+
+std::vector<WIN32_FIND_DATAW> * FileInfoShort::get_sorted_file_list ()
+{
+	// No default: the sorted list is created by the FileList app, so an
+	// absent list simply leaves this app with nothing to describe
+	return current_context->get<std::vector<WIN32_FIND_DATAW>> ("sorted-list");
+}
+
+std::wstring * FileInfoShort::get_pwd ()
+{
+	// No default can be provided for this parameter because it is set
+	// from outside (the core) when the display is built
+	return current_context->get<std::wstring> ("pwd");
 }
 
 }

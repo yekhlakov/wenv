@@ -1,11 +1,26 @@
 #pragma once
+#include <Windows.h>
+#include <string>
+#include <vector>
 #include "../App.h"
 
 namespace Wenv::Apps
 {
 
+// The file entries of a directory scan (a sorted list of WIN32_FIND_DATAW)
+using File_list_type = std::vector<WIN32_FIND_DATAW>;
+
 class FileList : public App
 {
+	// The per-parameter accessors to the current context (see the .cpp)
+	std::wstring * get_pwd ();
+	int * get_sort_mode ();
+	int * get_list_offset ();
+	std::string * get_focused_path ();
+	std::vector<App *> * get_app_group ();
+	File_list_type * get_file_list ();
+	File_list_type * get_sorted_file_list ();
+
 public:
 
 	FileList (const std::wstring &n) : App { n } {}

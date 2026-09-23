@@ -15,10 +15,8 @@ void ModalTitle::draw (::Wenv::Display::Display &display, const std::string &pat
 		return;
 	}
 
-	auto title = current_context->get<std::wstring> ("modal-title");
-	auto color = current_context->get<std::string> ("modal-title-color");
-
-	auto clr = color ? *color : std::string { ::Wenv::Display::Palette::Default_color };
+	auto title = get_title ();
+	auto clr = *get_title_color ();
 
 	// Fill the client area with the highlight background
 	current_display->with_color (clr, true);
@@ -30,6 +28,19 @@ void ModalTitle::draw (::Wenv::Display::Display &display, const std::string &pat
 		current_display->with_color (clr, true);
 		current_display->print_line (client_area, *title, current_display->PF_CENTER);
 	}
+}
+
+std::wstring * ModalTitle::get_title ()
+{
+	// The title is provided by the module that shows the modal; a missing
+	// value simply leaves the title block empty
+	return current_context->get<std::wstring> ("modal-title");
+}
+
+std::string * ModalTitle::get_title_color ()
+{
+	// Default: the normal text color, also used for the highlighted fill
+	return current_context->get<std::string> ("modal-title-color", [] () { return new std::string { ::Wenv::Display::Palette::Default_color }; });
 }
 
 } // namespace Wenv::Apps

@@ -15,8 +15,6 @@
 namespace Wenv::Apps
 {
 
-using File_list_type = std::vector<WIN32_FIND_DATAW>;
-
 File_list_type *list_directory_contents (const std::wstring &dirname)
 {
 	auto v = new std::vector<WIN32_FIND_DATAW> {};
@@ -158,13 +156,13 @@ void FileList::draw (::Wenv::Display::Display &display, const std::string &path,
 
 void FileList::redraw(const std::string &path)
 {
-	auto s = current_context->get<std::wstring> ("pwd");
-	auto sort_mode = current_context->get<int> ("sort-mode", [] () { return new int { 0 }; });
-	auto lst = current_context->get<File_list_type> ("list", [&] () {return list_directory_contents (*s); });
-	auto sorted_lst = current_context->get<File_list_type> ("sorted-list", [&] () {return sort_file_list (lst, *sort_mode); });
+	auto s = get_pwd ();
+	auto sort_mode = get_sort_mode ();
+	auto lst = get_file_list ();
+	auto sorted_lst = get_sorted_file_list ();
 	auto selected_file_idx = get_selected_file_idx (current_context, *s);
 	auto current_client_area = get_client_area (path);
-	auto list_offset = current_context->get<int> ("list-offset", [] () { return new int { 0 }; });
+	auto list_offset = get_list_offset ();
 
 	*selected_file_idx = min ((int) sorted_lst->size () - 1, *selected_file_idx);
 	*selected_file_idx = max (0, *selected_file_idx);
@@ -307,7 +305,7 @@ void FileList::redraw(const std::string &path)
 
 bool FileList::handle_click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers)
 {
-	auto path = *current_context->get<std::string> ("focused-path");
+	auto path = *get_focused_path ();
 
 	if (current_display->focused_context != current_context)
 	{
@@ -318,18 +316,18 @@ bool FileList::handle_click (::Wenv::Display::Rect client_area, ::Wenv::Display:
 		// Temporarily set the old context and redraw (to reflect loss of focus)
 		with_context (old_context);
 		current_display->focused_context = nullptr;
-		redraw_all (*old_context->get<std::string> ("focused-path"));
+		redraw_all (*get_focused_path ());
 		// Then set the new context
 		current_display->focused_context = target_context;
 		with_context (target_context);
 		// the redraw with "new" context will occur later
 	}
 
-	auto pwd = current_context->get<std::wstring> ("pwd");
-	auto sort_mode = current_context->get<int> ("sort-mode", [] () { return new int { 0 }; });
-	auto sorted_lst = current_context->get<File_list_type> ("sorted-list");
+	auto pwd = get_pwd ();
+	auto sort_mode = get_sort_mode ();
+	auto sorted_lst = get_sorted_file_list ();
 	auto idx = get_selected_file_idx (current_context, *pwd);
-	auto list_offset = current_context->get<int> ("list-offset", [] () { return new int { 0 }; });
+	auto list_offset = get_list_offset ();
 	auto list_size = client_area.height - 1;
 
 	if (position.y == 0 && name[0] != L'2')
@@ -365,10 +363,10 @@ bool FileList::handle_click (::Wenv::Display::Rect client_area, ::Wenv::Display:
 
 bool FileList::handle_keydown (unsigned int key, int modifiers)
 {
-	auto pwd = current_context->get<std::wstring> ("pwd");
+	auto pwd = get_pwd ();
 	auto idx = get_selected_file_idx (current_context, *pwd);
-	auto lst = current_context->get<File_list_type> ("sorted-list");
-	auto path = *current_context->get<std::string> ("focused-path");
+	auto lst = get_sorted_file_list ();
+	auto path = *get_focused_path ();
 
 	// The top line of the client area shows the sort indication
 	auto list_size = client_areas[path].height - 1;
@@ -377,7 +375,7 @@ bool FileList::handle_keydown (unsigned int key, int modifiers)
 	{
 		if (key == VK_F3) // Name
 		{
-			auto sort_mode = current_context->get<int> ("sort-mode");
+			auto sort_mode = get_sort_mode ();
 
 			if (*sort_mode == FileList::SORT_MODE_NAME || *sort_mode == FileList::SORT_MODE_REVERSE_NAME)
 			{
@@ -461,7 +459,7 @@ bool FileList::handle_keydown (unsigned int key, int modifiers)
 		redraw_all (path);
 		current_display->focused_context = current_display->get_context (target_context);
 		with_context (current_display->focused_context);
-		redraw_all (*current_display->focused_context->get<std::string>("focused-path"));
+		redraw_all (*get_focused_path ());
 		return true;
 	}
 	else if (key == VK_F3 || key == VK_F4)
@@ -476,7 +474,7 @@ bool FileList::handle_keydown (unsigned int key, int modifiers)
 			auto edit_target = ctx->get<std::wstring> ("edit-target", [] () { return new std::wstring {}; });
 			*edit_target = (*lst)[*idx].cFileName;
 			auto edit_pwd = ctx->get<std::wstring> ("edit-pwd", [] () { return new std::wstring {}; });
-			*edit_pwd = *current_context->get<std::wstring> ("pwd");
+			*edit_pwd = *get_pwd ();
 
 			current_display->window->set_display ("file-editor");
 			return true;
@@ -494,7 +492,7 @@ bool FileList::handle_keydown (unsigned int key, int modifiers)
 
 void FileList::redraw_all (const std::string & path)
 {
-	auto apps = current_context->get<std::vector<App *>> ("app-group");
+	auto apps = get_app_group ();
 	if (apps != nullptr)
 	{
 		for (auto app : *apps)
@@ -502,6 +500,49 @@ void FileList::redraw_all (const std::string & path)
 			app->with_context(current_context)->redraw (path);
 		}
 	}
+}
+
+std::wstring * FileList::get_pwd ()
+{
+	// No default can be provided for this parameter because it is set
+	// from outside (the core) when the display is built
+	return current_context->get<std::wstring> ("pwd");
+}
+
+int * FileList::get_sort_mode ()
+{
+	// Default: the alphabetical sort with directories first
+	return current_context->get<int> ("sort-mode", [] () { return new int { 0 }; });
+}
+
+int * FileList::get_list_offset ()
+{
+	// Default: the list is scrolled to its first entry
+	return current_context->get<int> ("list-offset", [] () { return new int { 0 }; });
+}
+
+std::string * FileList::get_focused_path ()
+{
+	// Set by the core when the display is built; no default makes sense here
+	return current_context->get<std::string> ("focused-path");
+}
+
+std::vector<App *> * FileList::get_app_group ()
+{
+	// No default: a missing group simply means there are no apps to redraw
+	return current_context->get<std::vector<App *>> ("app-group");
+}
+
+File_list_type * FileList::get_file_list ()
+{
+	// Default: the entries of the shown directory
+	return current_context->get<File_list_type> ("list", [this] () { return list_directory_contents (*get_pwd ()); });
+}
+
+File_list_type * FileList::get_sorted_file_list ()
+{
+	// Default: the file list sorted with the current sort mode
+	return current_context->get<File_list_type> ("sorted-list", [this] () { return sort_file_list (get_file_list (), *get_sort_mode ()); });
 }
 
 }
