@@ -40,6 +40,32 @@ std::wstring * get_current_directory ()
     return s;
 }
 
+// Build the default func menu command list: the single F10 "Exit" command
+// closes the current display (or the whole application when it is the only
+// display left)
+std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_default_commands ()
+{
+	auto commands = new std::vector<::Wenv::Apps::FuncMenuCommand> (12);
+
+	(*commands)[9] = {
+		L"Exit",
+
+		[] (::Wenv::Display::Display *display, ::Wenv::Context *)
+		{
+			if (!display->window->pop_display ())
+			{
+				DestroyWindow (display->window->hwnd);
+			}
+			else
+			{
+				display->window->draw (display->window->hdc);
+			}
+		}
+	};
+
+	return commands;
+}
+
 void Window::initialize ()
 {
     // Palette
@@ -74,9 +100,16 @@ void Window::initialize ()
 
         d->grid = grid;
 
+        // The parent context shared by both panels: it holds the default
+        // func menu command list (F10 exits the application)
+        auto main_context = d->add_context (new ::Wenv::Context { "file-manager" });
+        main_context->set ("func_menu.default", make_func_menu_default_commands ());
+
         auto left_context = d->add_context (new ::Wenv::Context { "file-manager-left-panel" });
+        left_context->parent = main_context;
         left_context->set ("pwd", get_current_directory ());
         auto right_context = d->add_context (new ::Wenv::Context { "file-manager-right-panel" });
+        right_context->parent = main_context;
         right_context->set ("pwd", get_current_directory ());
         d->focused_context = left_context;
 
@@ -183,25 +216,8 @@ void Window::initialize ()
         grid->context->set ("status-bar", status);
 	grid->context->set ("func-menu", func_menu);
 
-	// The default command list of the editor: F10 exits the current display
-	// (or the whole application when it is the only one left)
-	auto default_commands = new std::vector<::Wenv::Apps::FuncMenuCommand> (12);
-	(*default_commands)[9] = {
-		L"Exit",
-
-		[] (::Wenv::Display::Display *display, ::Wenv::Context *)
-		{
-			if (!display->window->pop_display ())
-			{
-				DestroyWindow (display->window->hwnd);
-			}
-			else
-			{
-				display->window->draw (display->window->hdc);
-			}
-		}
-	};
-	grid->context->set ("func_menu.default", default_commands);
+	// The default command list of the editor: the shared F10 "Exit" command
+	grid->context->set ("func_menu.default", make_func_menu_default_commands ());
 
         d->grid = grid;
 
