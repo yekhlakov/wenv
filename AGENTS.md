@@ -13,15 +13,31 @@ A text-based working environment (file manager / viewer etc) inspired by classic
 
 ## Project Structure
 
-. 		-- root directory, contains several source files and auxiliary data
-├─/apps		-- application fragments are here
-│ ├─/FileEditor	-- The text file viewer/editor app collection (status bar + the editor)
-│ ├─/FileManager -- The file manager app collection (status bar(s), file list)
+Consult this structure BEFORE searching (grepping/globbing) the codebase: it usually tells you exactly which file(s) to look at.
+When your changes alter the code structure (new/moved/removed files or directories), update this description accordingly in the same change.
+
+. 		-- root directory, contains the core source files, project files and auxiliary data
+│ ├─wenv.cpp / wenv.h	-- application entry point (`wWinMain`) and core wiring
+│ ├─Context.h		-- `Context` class: named application settings, persisted to/from json
+│ ├─Types.h		-- shared basic types (`Pos`, `Rect` etc) and forward declarations
+│ ├─framework.h, targetver.h -- Win32 boilerplate headers
+│ ├─Resource.h, wenv.rc, wenv.ico -- resources (icons, version info etc)
+│ ├─app.manifest	-- application manifest
+│ ├─wenv.vcxproj (+ .filters, .user) -- MSBuild project files
+│ ├─make.bat		-- quick build script for smoke testing
+│ ├─cache.json		-- runtime state/settings cache written by the app
+│ ├─opencode.json	-- opencode agent configuration
+│ └─test.exe		-- built binary (build output, not source)
+├─/apps		-- application fragments ("apps" shown inside windows) are here; App.h/App.cpp define the base App class
+│ ├─/FileEditor	-- The text file viewer/editor app collection (File file wrapper, the editor, its status bar)
+│ ├─/FileManager -- The file manager app collection (file list, its header, short file info panel)
 │ ├─/FuncMenu	-- The menu of functional keys (to be displayed in the bottom of the screen)
-│ └─/Modal	-- The modal box apps (title, text, button set etc)
-├─/display	-- window management and displaying of information
-├─/layout	-- abstract-ish handling of display layouts (grid-based layout design)
-├─/maxy		-- imported (library) components; not a part of this project; maintained elsewhere; must not modify these; ignore compilation warnings here.
+│ └─/Modal	-- The modal box components (title, text, buttons)
+├─/display	-- window management and displaying of information; Display (core + Output/Input/Init parts), Window (core + Init/Input parts), Modal, Character, Palette
+├─/layout	-- abstract-ish handling of display layouts (grid-based layout design): Grid, Layout
+├─/maxy		-- imported (library) components: json, strings, escape, control (container/events); not a part of this project; maintained elsewhere; must not modify these; ignore compilation warnings here.
+├─/wenv		-- intermediate build output (object files); not source
+├─/x64		-- build output (executables); not source
 └─/tmp		-- use this for temporary storage instead of system directories
 
 

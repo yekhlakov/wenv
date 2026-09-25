@@ -49,6 +49,9 @@ void FileEditorStatusBar::redraw (const std::string &path)
 	auto top = get_file_top_line (full_path);
 	auto left = get_file_left_column (full_path);
 
+	// The tab width is a persistent setting, shared with the editor
+	auto tab_width = *get_tab_width (current_display->get_persistent_context ());
+
 	// Right-aligned information
 	std::wstring right;
 	if (file != nullptr)
@@ -61,21 +64,23 @@ void FileEditorStatusBar::redraw (const std::string &path)
 		{
 			right = std::format
 			(
-				L"  {}  {}/?  Col {}",
+				L"  {}  {}/?  Col {}  T{}",
 				std::format (L"{} B", file->get_file_size ()),
 				line_num,
-				*left + 1
+				*left + 1,
+				tab_width
 			);
 		}
 		else
 		{
 			right = std::format
 			(
-				L"  {}  {}/{}  Col {}",
+				L"  {}  {}/{}  Col {}  T{}",
 				std::format (L"{} B", file->get_file_size ()),
 				line_num,
 				line_count,
-				*left + 1
+				*left + 1,
+				tab_width
 			);
 		}
 	}

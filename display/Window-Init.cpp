@@ -11,6 +11,7 @@
 #include "../apps/FileManager/FileListHeader.h"
 #include "../apps/FileManager/FileInfoShort.h"
 
+#include "../apps/FileEditor/File.h"
 #include "../apps/FileEditor/FileEditor.h"
 #include "../apps/FileEditor/FileEditorStatusBar.h"
 
@@ -60,6 +61,26 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_default_commands ()
 			{
 				display->window->draw (display->window->hdc);
 			}
+		}
+	};
+
+	return commands;
+}
+
+// Build the default func menu command list of the file editor: in addition to
+// the common F10 "Exit" it has the F3 "TabSz" command, which cycles the tab
+// width of the editor. The func menu redraws the apps of the context after a
+// command has run, so the new width shows up in the editor and its status bar
+std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_editor_commands ()
+{
+	auto commands = make_func_menu_default_commands ();
+
+	(*commands)[2] = {
+		L"TabSz",
+
+		[] (::Wenv::Display::Display *display, ::Wenv::Context *)
+		{
+			::Wenv::Apps::cycle_tab_width (display->get_persistent_context ());
 		}
 	};
 
@@ -216,8 +237,9 @@ void Window::initialize ()
         grid->context->set ("status-bar", status);
 	grid->context->set ("func-menu", func_menu);
 
-	// The default command list of the editor: the shared F10 "Exit" command
-	grid->context->set ("func_menu.default", make_func_menu_default_commands ());
+	// The default command list of the editor: F3 cycles the tab width,
+	// F10 exits the display
+	grid->context->set ("func_menu.default", make_func_menu_file_editor_commands ());
 
         d->grid = grid;
 

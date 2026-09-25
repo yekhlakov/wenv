@@ -368,8 +368,10 @@ bool FileList::handle_keydown (unsigned int key, int modifiers)
 	auto lst = get_sorted_file_list ();
 	auto path = *get_focused_path ();
 
-	// The top line of the client area shows the sort indication
-	auto list_size = client_areas[path].height - 1;
+	// The top line of the client area shows the sort indication.
+	// The path may belong to a sibling column, so look the area up without
+	// inserting (operator[] on the map would silently add a zero-size rect)
+	auto list_size = get_client_area (path).height - 1;
 
 	if (modifiers & 1) // control
 	{

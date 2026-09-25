@@ -55,6 +55,12 @@ void FileEditor::redraw (const std::string &path)
 		current_context->set ("viewed-path", new std::wstring { full_path });
 	}
 
+	// The tab width is a persistent setting, shared by the editor and its
+	// status bar; the file re-measures the content when it changes
+	auto tab_width = *get_tab_width (current_display->get_persistent_context ());
+
+	file->set_tab_width (tab_width);
+
 	auto area = get_client_area (path);
 
 	// Store position in persistent context per file, keyed by full path
@@ -91,7 +97,7 @@ void FileEditor::redraw (const std::string &path)
 		std::vector<std::pair<int, int>> tab_spans;
 		if (ln < (int) file->lines.size ())
 		{
-			auto result = expand_tabs (it->raw_data);
+			auto result = expand_tabs (it->raw_data, tab_width);
 			expanded = std::move (result.first);
 			tab_spans = std::move (result.second);
 			++it;

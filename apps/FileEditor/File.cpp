@@ -1,6 +1,8 @@
 #include <algorithm>
+#include <array>
 #include <iterator>
 #include <string>
+#include "../../Context.h"
 #include "../../maxy/strings.h"
 #include "File.h"
 
@@ -9,7 +11,7 @@ namespace Wenv::Apps
 
 static constexpr std::uint64_t ONE_MB = 1024 * 1024;
 
-std::pair<std::wstring, std::vector<std::pair<int, int>>> expand_tabs (const std::string &line)
+std::pair<std::wstring, std::vector<std::pair<int, int>>> expand_tabs (const std::string &line, int tab_width)
 {
 	auto wide = maxy::strings::utf8towchar (line);
 	std::wstring out;
@@ -20,7 +22,7 @@ std::pair<std::wstring, std::vector<std::pair<int, int>>> expand_tabs (const std
 	{
 		if (ch == L'\t')
 		{
-			int spaces = 4 - (col % 4);
+			int spaces = tab_width - (col % tab_width);
 			int pos = (int) out.size ();
 			out.append (spaces, L' ');
 			tab_spans.push_back ({ pos, spaces });
@@ -34,6 +36,28 @@ std::pair<std::wstring, std::vector<std::pair<int, int>>> expand_tabs (const std
 	}
 
 	return { out, tab_spans };
+}
+
+int * get_tab_width (::Wenv::Context *persistent_context)
+{
+	auto tab_width = persistent_context->get<int> ("tab-width", [] () { return new int { 4 }; });
+
+	// A width outside the 1..9 range the display assumes would break the tab
+	// expansion, so a stale or damaged stored value is clamped
+	*tab_width = std::clamp (*tab_width, 1, 9);
+
+	return tab_width;
+}
+
+void cycle_tab_width (::Wenv::Context *persistent_context)
+{
+	// The widths the file editor cycles through
+	static const std::array<int, 3> widths { 4, 8, 2 };
+
+	auto tab_width = get_tab_width (persistent_context);
+	auto current = std::find (widths.begin (), widths.end (), *tab_width) - widths.begin ();
+
+	*tab_width = widths[(current + 1) % widths.size ()];
 }
 
 File::File (const std::wstring &file_path)
@@ -120,7 +144,7 @@ File::File (const std::wstring &file_path)
 	// Determine the longest expanded line of the loaded content
 	for (auto &l : lines)
 	{
-		longest_expanded = max (longest_expanded, expand_tabs (l.raw_data).first.size ());
+		measure (l);
 	}
 
 	// If the file is small enough, we are done
@@ -138,6 +162,30 @@ File::~File ()
 	{
 		CloseHandle (handle);
 	}
+}
+
+void File::set_tab_width (int tab_width)
+{
+	if (tab_width == measured_tab_width)
+	{
+		return;
+	}
+
+	measured_tab_width = tab_width;
+
+	// The expanded width of the content depends on the tab width, so the
+	// already loaded lines must be measured again from scratch
+	longest_expanded = 0;
+
+	for (auto &l : lines)
+	{
+		measure (l);
+	}
+}
+
+void File::measure (const FileLine &line)
+{
+	longest_expanded = max (longest_expanded, expand_tabs (line.raw_data, measured_tab_width).first.size ());
 }
 
 void File::ensure_loaded (int top_line, int visible_height)
@@ -231,7 +279,7 @@ void File::load_more ()
 	std::advance (it, new_start);
 	for (; it != lines.end (); ++it)
 	{
-		longest_expanded = max (longest_expanded, expand_tabs (it->raw_data).first.size ());
+		measure (*it);
 	}
 
 	// If we have read everything, finalize
