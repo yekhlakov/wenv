@@ -89,7 +89,10 @@ void processAgentData (int id)
 - Comment the code you produce. Comment the resulting state of the code, not the nature of the changes.
 - Use `chcp 65001` in bat scripts to switch shell encoding to utf-8 so that warnings don't appear broken
 
-## Negative
+## Negative rules
 
-- Don't overengineer.
+- Don't overengineer. Don't introduce layers of abstraction unless strictly necessary.
 - Avoid repetition and boilerplate.
+- Don't try to invent the ways to overcome your own limits. For example if you can't work with images, don't take screenshots, don't write components to analyze screenshots manually.
+  **Suggestion**: check your possibilities in advance so you don't waste time producing artifacts you won't be able to work with anyway.
+- Don't fight with ad hoc utilities you write. If your utility script still fails after two corrections, discard it and request help from the user.

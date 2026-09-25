@@ -33,6 +33,7 @@ void FileEditorStatusBar::redraw (const std::string &path)
 	auto target = get_edit_target ();
 	auto pwd = get_edit_pwd ();
 	auto file = get_file ();
+	auto is_editing = get_is_editing ();
 
 	if (target == nullptr || pwd == nullptr)
 	{
@@ -85,14 +86,36 @@ void FileEditorStatusBar::redraw (const std::string &path)
 		}
 	}
 
-	current_display->with_color (::Wenv::Display::Palette::Default_color, true);
+	// The whole bar is drawn in the highlight variant of its colors; the lock
+	// in the leftmost corner shows the state of the editor: a closed lock of
+	// the quote color when the file is only viewed and an open lock of the
+	// warning color when it is edited
+	auto lock = std::wstring { *is_editing ? L"\U0001F513" : L"\U0001F512" };
 
-	current_display->print_line
+	current_display->with_color (::Wenv::Display::Palette::Default_color, true);
+	current_display->print_line (area, L"", current_display->PF_ERASE_BACKGROUND);
+
+	current_display->with_color
 	(
-		area,
-		full_path,
-		current_display->PF_TOP | current_display->PF_LEFT | current_display->PF_ERASE_BACKGROUND
+		*is_editing
+			? ::Wenv::Display::Palette::Warning_element_color
+			: ::Wenv::Display::Palette::Quote_element_color,
+		true
 	);
+
+	// The locks are outside the basic multilingual plane, so they take the
+	// two cells of their surrogate pair
+	current_display->print_line (area.x, area.y, lock);
+
+	// The name of an edited file is colored like its open lock
+	if (*is_editing)
+	{
+		current_display->with_color (::Wenv::Display::Palette::Warning_element_color, true);
+	}
+
+	current_display->print_line (area.x + (int) lock.size (), area.y, full_path);
+
+	current_display->with_color (::Wenv::Display::Palette::Default_color, true);
 
 	current_display->print_line
 	(
@@ -121,6 +144,13 @@ File * FileEditorStatusBar::get_file ()
 	// No default: the file is loaded and stored by the editor itself; the
 	// bar only appends the file details when one is actually loaded
 	return current_context->get<File> ("file");
+}
+
+bool * FileEditorStatusBar::get_is_editing ()
+{
+	// Default: a file that has just been opened is viewed, not edited. The
+	// state is set from outside (the file manager) when the file is shown
+	return current_context->get<bool> ("is_editing", [] () { return new bool { false }; });
 }
 
 int * FileEditorStatusBar::get_file_top_line (const std::wstring &full_path)

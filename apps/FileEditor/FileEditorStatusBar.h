@@ -14,6 +14,7 @@ class FileEditorStatusBar : public App
 	std::wstring * get_edit_target ();
 	std::wstring * get_edit_pwd ();
 	File * get_file ();
+	bool * get_is_editing ();
 
 	int * get_file_top_line (const std::wstring &full_path);
 	int * get_file_left_column (const std::wstring &full_path);

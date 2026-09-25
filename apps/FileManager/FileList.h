@@ -10,6 +10,15 @@ namespace Wenv::Apps
 // The file entries of a directory scan (a sorted list of WIN32_FIND_DATAW)
 using File_list_type = std::vector<WIN32_FIND_DATAW>;
 
+// The index of the file selected in the panel of the given context; the
+// selection is remembered per directory
+int *get_selected_file_idx (::Wenv::Context *c, const std::wstring &dirname);
+
+// Show the file selected in the given file list panel in the file editor
+// display, either for viewing or for editing. A selected directory is left
+// alone, since descending into it is the business of the file list itself
+void show_selected_file (::Wenv::Display::Display *display, ::Wenv::Context *c, bool is_editing);
+
 class FileList : public App
 {
 	// The per-parameter accessors to the current context (see the .cpp)

@@ -114,6 +114,46 @@ int *get_selected_file_idx (::Wenv::Context * c, const std::wstring &dirname)
 	return c->get<int> ("selected-file-idx " + maxy::strings::wchartoutf8 (dirname), [] () ->int *{ return new int { 0 }; });
 }
 
+void show_selected_file (::Wenv::Display::Display *display, ::Wenv::Context *c, bool is_editing)
+{
+	// The selection is read from the context of the panel, so the call may
+	// come either from the func menu or from the file list itself
+	auto pwd = c->get<std::wstring> ("pwd");
+
+	if (pwd == nullptr)
+	{
+		return;
+	}
+
+	auto lst = c->get<File_list_type> ("sorted-list");
+	auto idx = get_selected_file_idx (c, *pwd);
+
+	// Nothing is shown when there is no list yet or when the selection has
+	// fallen out of it (e.g. after the directory has changed)
+	if (lst == nullptr || *idx < 0 || *idx >= (int) lst->size ())
+	{
+		return;
+	}
+
+	auto &selected = (*lst)[*idx];
+
+	// Only a file can be shown in the editor
+	if (selected.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+	{
+		return;
+	}
+
+	// The editor keeps the shown file together with the requested edit state
+	// in its own context, which it reads when it and its status bar redraw
+	auto ctx = display->window->get_display ("file-editor")->get_context ("file-editor");
+
+	ctx->set ("edit-target", new std::wstring { selected.cFileName });
+	ctx->set ("edit-pwd", new std::wstring { *pwd });
+	ctx->set ("is_editing", new bool { is_editing });
+
+	display->window->set_display ("file-editor");
+}
+
 bool is_executable_file (const std::wstring &filename)
 {
 	static const std::wregex pattern (
@@ -463,24 +503,6 @@ bool FileList::handle_keydown (unsigned int key, int modifiers)
 		with_context (current_display->focused_context);
 		redraw_all (*get_focused_path ());
 		return true;
-	}
-	else if (key == VK_F3 || key == VK_F4)
-	{
-		// Show editor/viewer if this is not a directory
-		if (!((*lst)[*idx].dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
-		{
-			auto ed = current_display->window->get_display ("file-editor");
-			auto ctx = ed->get_context ("file-editor");
-			auto edit_mode = ctx->get<int> ("edit-mode", [] () {return new int {}; });
-			*edit_mode = key == VK_F4 ? 1 : 0;
-			auto edit_target = ctx->get<std::wstring> ("edit-target", [] () { return new std::wstring {}; });
-			*edit_target = (*lst)[*idx].cFileName;
-			auto edit_pwd = ctx->get<std::wstring> ("edit-pwd", [] () { return new std::wstring {}; });
-			*edit_pwd = *get_pwd ();
-
-			current_display->window->set_display ("file-editor");
-			return true;
-		}
 	}
 	else
 	{

@@ -87,6 +87,35 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_editor_commands
 	return commands;
 }
 
+// Build the default func menu command list of the file list: in addition to
+// the common F10 "Exit" it has the F3 "View" and F4 "Edit" commands, which show
+// the file selected in the panel in the editor - either closed for editing or
+// open for it, which its status bar shows as a lock
+std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_list_commands ()
+{
+	auto commands = make_func_menu_default_commands ();
+
+	(*commands)[2] = {
+		L"View",
+
+		[] (::Wenv::Display::Display *display, ::Wenv::Context *context)
+		{
+			::Wenv::Apps::show_selected_file (display, context, false);
+		}
+	};
+
+	(*commands)[3] = {
+		L"Edit",
+
+		[] (::Wenv::Display::Display *display, ::Wenv::Context *context)
+		{
+			::Wenv::Apps::show_selected_file (display, context, true);
+		}
+	};
+
+	return commands;
+}
+
 void Window::initialize ()
 {
     // Palette
@@ -122,9 +151,10 @@ void Window::initialize ()
         d->grid = grid;
 
         // The parent context shared by both panels: it holds the default
-        // func menu command list (F10 exits the application)
+        // func menu command list (F3/F4 show the selected file in the editor,
+        // F10 exits the application)
         auto main_context = d->add_context (new ::Wenv::Context { "file-manager" });
-        main_context->set ("func_menu.default", make_func_menu_default_commands ());
+        main_context->set ("func_menu.default", make_func_menu_file_list_commands ());
 
         auto left_context = d->add_context (new ::Wenv::Context { "file-manager-left-panel" });
         left_context->parent = main_context;

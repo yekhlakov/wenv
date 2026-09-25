@@ -5,12 +5,10 @@
 #include "../../display/Palette.h"
 #include "../../Context.h"
 #include "FileInfoShort.h"
+#include "FileList.h"
 
 namespace Wenv::Apps
 {
-
-
-int *get_selected_file_idx (::Wenv::Context *c, const std::wstring &dirname);
 
 void FileInfoShort::draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area)
 {
