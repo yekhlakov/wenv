@@ -86,11 +86,12 @@ void FileEditorStatusBar::redraw (const std::string &path)
 		}
 	}
 
-	// The whole bar is drawn in the highlight variant of its colors; the lock
-	// in the leftmost corner shows the state of the editor: a closed lock of
-	// the quote color when the file is only viewed and an open lock of the
-	// warning color when it is edited
-	auto lock = std::wstring { *is_editing ? L"\U0001F513" : L"\U0001F512" };
+	// The whole bar is drawn in the highlight variant of its colors; the mark
+	// in the leftmost corner shows the state of the editor: an open circle of
+	// the quote color when the file is only viewed and a filled one of the
+	// warning color when it is edited. Both are single cells of the font, so
+	// the name of the file follows right after the mark
+	auto mark = *is_editing ? L"\u25CF" : L"\u25CB";
 
 	current_display->with_color (::Wenv::Display::Palette::Default_color, true);
 	current_display->print_line (area, L"", current_display->PF_ERASE_BACKGROUND);
@@ -103,17 +104,15 @@ void FileEditorStatusBar::redraw (const std::string &path)
 		true
 	);
 
-	// The locks are outside the basic multilingual plane, so they take the
-	// two cells of their surrogate pair
-	current_display->print_line (area.x, area.y, lock);
+	current_display->print_line (area.x, area.y, mark);
 
-	// The name of an edited file is colored like its open lock
+	// The name of an edited file is colored like its mark
 	if (*is_editing)
 	{
 		current_display->with_color (::Wenv::Display::Palette::Warning_element_color, true);
 	}
 
-	current_display->print_line (area.x + (int) lock.size (), area.y, full_path);
+	current_display->print_line (area.x + 1, area.y, full_path);
 
 	current_display->with_color (::Wenv::Display::Palette::Default_color, true);
 
