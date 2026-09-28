@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -47,6 +48,14 @@ struct Display
 
 	::Wenv::Apps::App *focused_app = nullptr;
 	::Wenv::Context *focused_context = nullptr;
+
+	// The text cursor: its position in characters and its visibility
+	bool is_cursor_visible = true;
+	Pos cursor_position { 10, 10 };
+
+	// The current blink phase of the text cursor; toggled twice a second by
+	// the window blinker thread, so it must be atomic
+	std::atomic<bool> cursor_blink { true };
 
 	::Wenv::Apps::App *add_app (::Wenv::Apps::App *a);
 	::Wenv::Context * add_context (::Wenv::Context *c);

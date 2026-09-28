@@ -119,6 +119,52 @@ Window::Window(HINSTANCE hInstance, std::wstring title, std::wstring className):
         RECT client_rect;
         GetClientRect (hwnd, &client_rect);
         SendMessage (hwnd, WM_SIZE, SIZE_RESTORED, MAKELPARAM (client_rect.right - client_rect.left, client_rect.bottom - client_rect.top));
+
+        // Start the cursor blinker thread (it waits on the condition variable,
+        // so it consumes no CPU while sleeping)
+        blinker_thread = std::thread (&Window::blinker_loop, this);
+    }
+}
+
+// The blinker thread body: twice a second toggle the current display's cursor
+// blink phase and invalidate the character cell under the cursor, so the
+// WM_PAINT handler redraws it in the new phase
+void Window::blinker_loop ()
+{
+    while (!blinker_stop)
+    {
+        std::unique_lock<std::mutex> lock (blinker_mutex);
+        blinker_wakeup.wait_for (lock, std::chrono::milliseconds (500));
+
+        if (blinker_stop)
+        {
+            break;
+        }
+
+        Display *d = current_display;
+
+        if (d == nullptr)
+        {
+            continue;
+        }
+
+        d->cursor_blink = !d->cursor_blink;
+
+        // The cell of an invisible cursor is already correct on the screen
+        if (d->is_cursor_visible && char_width > 0 && char_height > 0)
+        {
+            const Pos &cp = d->cursor_position;
+
+            RECT cursor_rect
+            {
+                cp.x * char_width,
+                cp.y * char_height,
+                (cp.x + 1) * char_width,
+                (cp.y + 1) * char_height
+            };
+
+            InvalidateRect (hwnd, &cursor_rect, FALSE);
+        }
     }
 }
 
@@ -189,6 +235,16 @@ Display *Window::get_display (const std::string &n)
 
 Window::~Window()
 {
+    // Stop the blinker thread before the window is torn down; the condition
+    // variable wakeup makes it return immediately
+    blinker_stop = true;
+    blinker_wakeup.notify_all ();
+
+    if (blinker_thread.joinable ())
+    {
+        blinker_thread.join ();
+    }
+
     if (hFont)
     {
         DeleteObject (hFont);
@@ -508,6 +564,30 @@ void Window::draw (HDC hdc, const RECT &update_rect) {
         // (prevents color bleeding if rows have different starting colors)
         current_fg = -1;
         current_bg = -1;
+    }
+
+    // The text cursor: drawn as a bar of the default foreground color
+    // occupying the lower 1/8 of the character cell under the cursor, but only
+    // when it is visible, its blink phase is "on" and it lies inside the
+    // invalidated region
+    if (current_display->is_cursor_visible && current_display->cursor_blink)
+    {
+        const Pos &cp = current_display->cursor_position;
+
+        if (cp.x >= first_col && cp.x < last_col && cp.y >= first_row && cp.y < last_row)
+        {
+            RECT cursor_rect
+            {
+                cp.x * char_width,
+                cp.y * char_height + char_height - char_height / 8,
+                (cp.x + 1) * char_width,
+                (cp.y + 1) * char_height
+            };
+
+            HBRUSH brush = CreateSolidBrush (current_palette->get_entry (Palette::Default_color).foreground_color);
+            FillRect (hdc, &cursor_rect, brush);
+            DeleteObject (brush);
+        }
     }
 
     SelectObject (hdc, hOldFont);

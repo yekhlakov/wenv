@@ -1,7 +1,12 @@
 #pragma once
 
 #include <windows.h>
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -47,6 +52,16 @@ struct Window {
     bool key_state[256];
     int mouse_x = 0;
     int mouse_y = 0;
+
+    // The cursor blinker thread: sleeps half a second, toggles the current
+    // display's cursor blink phase and invalidates the cell under the cursor
+    std::thread blinker_thread;
+    std::atomic<bool> blinker_stop { false };
+    std::mutex blinker_mutex;
+    std::condition_variable blinker_wakeup;
+
+    // The blinker thread body
+    void blinker_loop ();
 
     HFONT hFont;
     std::vector<std::wstring> monospace_fonts;
