@@ -119,6 +119,7 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_list_commands (
 void Window::initialize ()
 {
     // Palette
+	/*
     current_palette->colors.push_back ({ 0x000070aa, 0, 0, 0x000070aa }); // default
     current_palette->colors.push_back ({ 0x0030c0ff, 0, 0x0030c0ff, 0x000070aa }); // Active
     current_palette->colors.push_back ({ 0x00004460, 0, 0x00004060, 0x000070aa }); // Dark
@@ -126,6 +127,17 @@ void Window::initialize ()
     current_palette->colors.push_back ({ 0x008877aa, 0, 0x00554466, 0x000070aa }); // Number
     current_palette->colors.push_back ({ 0x00667788, 0, 0x00334455, 0x000070aa }); // Alter aka Define
     current_palette->colors.push_back ({ 0x000040aa, 0, 0x00003099, 0x000070aa }); // Warning
+	*/
+
+    int bg = 0x000070aa;
+
+    current_palette->colors.push_back ({ bg, 0, 0, bg }); // default
+    current_palette->colors.push_back ({ 0x0000ccff, 0, 0x0000ccff, bg }); // Active
+    current_palette->colors.push_back ({ 0x00004466, 0, 0x00004466, bg }); // Dark
+    current_palette->colors.push_back ({ 0x0000bbaa, 0, 0x00005540, bg }); // Quote aka String
+    current_palette->colors.push_back ({ 0x00995566, 0, 0x00663344, bg }); // Number
+    current_palette->colors.push_back ({ 0x00778899, 0, 0x00445055, bg }); // Alter aka Define
+    current_palette->colors.push_back ({ 0x000070ff, 0, 0x00000077, bg }); // Warning
 
     current_palette->named_colors.insert ({ Palette::Default_color, 0 });
     current_palette->named_colors.insert ({ Palette::Active_element_color, 1 });

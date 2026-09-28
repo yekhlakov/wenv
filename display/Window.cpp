@@ -1,4 +1,5 @@
 
+#include <climits>
 #include <fstream>
 #include "Display.h"
 #include "Palette.h"
@@ -231,7 +232,8 @@ LRESULT CALLBACK Window::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM 
         {
             PAINTSTRUCT ps;
             BeginPaint(hWnd, &ps);
-            pWindow->draw(ps.hdc);
+            // Redraw only the characters covered by the update rectangle
+            pWindow->draw(ps.hdc, ps.rcPaint);
             EndPaint(hWnd, &ps);
         }
         break;
@@ -423,9 +425,16 @@ void Window::handle_resize (WPARAM wParam, LPARAM lParam)
 	}
 }
 
-void Window::draw (HDC hdc) {
+void Window::draw (HDC hdc)
+{
+	// A huge rectangle stands in for the whole client area
+	RECT full { 0, 0, INT_MAX / 2, INT_MAX / 2 };
+	draw (hdc, full);
+}
 
-    if (current_display == nullptr)
+void Window::draw (HDC hdc, const RECT &update_rect) {
+
+    if (current_display == nullptr || char_width <= 0 || char_height <= 0)
     {
         return;
     }
@@ -433,8 +442,23 @@ void Window::draw (HDC hdc) {
     HFONT hOldFont = (HFONT) SelectObject (hdc, hFont);
 
     SetBkMode (hdc, OPAQUE);
-    int current_bg = -1, current_fg = -1;
+    int current_fg = -1, current_bg = -1;
     std::wstring current_ln = L"";
+
+    // The update region is rectangular, so all character cells intersecting it
+    // must be redrawn: compute their row/column range, no per-cell checks needed
+    int first_row = update_rect.top / char_height;
+    int first_col = update_rect.left / char_width;
+    int last_row = (update_rect.bottom + char_height - 1) / char_height;
+    int last_col = (update_rect.right + char_width - 1) / char_width;
+
+    // The client area may not be an exact multiple of the character size, so
+    // the rectangle can reach past the buffer: clamp the range to it
+    int buffer_rows = static_cast<int>(current_display->data.size ());
+    if (first_row < 0) first_row = 0;
+    if (first_col < 0) first_col = 0;
+    if (first_row > buffer_rows) first_row = buffer_rows;
+    if (last_row > buffer_rows) last_row = buffer_rows;
 
     // Helper to draw the batch and reset
     auto flush_batch = [&] (int x_start, int y_start, std::wstring &str) {
@@ -444,11 +468,17 @@ void Window::draw (HDC hdc) {
         }
     };
 
-    for (size_t y = 0; y < current_display->data.size (); ++y) {
+    for (int y = first_row; y < last_row; ++y) {
         // Reset row tracking for every new line
-        int row_start_x = 0;
+        int row_start_x = first_col;
 
-        for (size_t x = 0; x < current_display->data[y].size (); ++x) {
+        int row_last_col = static_cast<int>(current_display->data[y].size ());
+        if (row_last_col > last_col)
+        {
+            row_last_col = last_col;
+        }
+
+        for (int x = first_col; x < row_last_col; ++x) {
 
             const Character &ch = current_display->data[y][x];
             int incoming_fg = ch.fg_color;
@@ -463,7 +493,7 @@ void Window::draw (HDC hdc) {
             // If color changes
             if (incoming_fg != current_fg || incoming_bg != current_bg) {
                 // 1. Flush the previous color block
-                flush_batch (row_start_x, static_cast<int>(y), current_ln);
+                flush_batch (row_start_x, y, current_ln);
 
                 // 2. Apply new colors
                 current_fg = incoming_fg;
@@ -472,16 +502,16 @@ void Window::draw (HDC hdc) {
                 SetBkColor (hdc, current_bg);
 
                 // 3. Start new block at current X
-                row_start_x = static_cast<int>(x);
+                row_start_x = x;
             }
 
             current_ln += ch.value;
         }
 
         // End of row: Flush whatever is left in the current line
-        flush_batch (row_start_x, static_cast<int>(y), current_ln);
+        flush_batch (row_start_x, y, current_ln);
 
-        // Reset color state to force a refresh on the next row 
+        // Reset color state to force a refresh on the next row
         // (prevents color bleeding if rows have different starting colors)
         current_fg = -1;
         current_bg = -1;

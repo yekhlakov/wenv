@@ -95,7 +95,11 @@ struct Window {
 
     void activate_current ();
 
-    void draw(HDC hdc);
+    // Draw everything; stands in for a full-client-area update rectangle
+    void draw (HDC hdc);
+
+    // Draw only the characters whose cells intersect the update rectangle
+    void draw (HDC hdc, const RECT &update_rect);
 
     ::Wenv::Layout::Grid *get_grid (const std::string &n);
 
