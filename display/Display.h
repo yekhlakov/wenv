@@ -89,7 +89,7 @@ struct Display
 	// Handle a mouse click at the given character coordinates. When a modal is
 	// visible only the apps of the modal are examined, otherwise the apps of the
 	// current layout; a click on a border is ignored. Returns true when an app
-	// handled the click and the whole screen must be redrawn
+	// handled the click (the caller invalidates the modified characters)
 	bool handle_mouse_click (int x, int y, int modifiers);
 
 	// Find the app (and its client area) the given point falls into within the

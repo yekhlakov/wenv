@@ -59,7 +59,7 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_default_commands ()
 			}
 			else
 			{
-				display->window->draw (display->window->hdc);
+				display->window->invalidate_modified ();
 			}
 		}
 	};

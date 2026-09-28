@@ -57,13 +57,17 @@ void Window::dispatch_key_event (WPARAM wParam, int mods, bool pressed)
 		{
 			forward_key_to_apps (current_display->current_modal->apps, ctx, wParam, mods, pressed);
 		}
-		draw (hdc);
+		invalidate_modified ();
 		return;
 	}
 
 	if (pressed && wParam == VK_ESCAPE && display_stack.size () > 1)
 	{
 		pop_display ();
+
+		// The restored display has been fully regenerated - repaint it
+		invalidate_modified ();
+
 		return;
 	}
 
@@ -79,7 +83,7 @@ void Window::dispatch_key_event (WPARAM wParam, int mods, bool pressed)
 	// them consumes it, the focused app gets nothing
 	if (forward_key_to_apps (current_display->listening_apps, focused_context, wParam, mods, pressed))
 	{
-		draw (hdc);
+		invalidate_modified ();
 		return;
 	}
 
@@ -89,7 +93,7 @@ void Window::dispatch_key_event (WPARAM wParam, int mods, bool pressed)
 	{
 		forward_key_to_apps ({ focused_app }, focused_context, wParam, mods, pressed);
 	}
-	draw (hdc);
+	invalidate_modified ();
 }
 
 // Call the keydown or keyup handler of each app, bound to the given context,
@@ -121,7 +125,7 @@ void Window::handle_mousemove (WPARAM wParam, LPARAM lParam)
 {
 	mouse_x = LOWORD (lParam);
 	mouse_y = HIWORD (lParam);
-	draw (hdc);
+	invalidate_modified ();
 }
 
 void Window::handle_mouse_click (WPARAM wParam, LPARAM lParam)
@@ -157,7 +161,7 @@ void Window::handle_mouse_click (WPARAM wParam, LPARAM lParam)
 
 	if (current_display->handle_mouse_click (x, y, mods))
 	{
-		draw (hdc);
+		invalidate_modified ();
 	}
 }
 

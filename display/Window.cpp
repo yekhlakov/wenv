@@ -425,13 +425,6 @@ void Window::handle_resize (WPARAM wParam, LPARAM lParam)
 	}
 }
 
-void Window::draw (HDC hdc)
-{
-	// A huge rectangle stands in for the whole client area
-	RECT full { 0, 0, INT_MAX / 2, INT_MAX / 2 };
-	draw (hdc, full);
-}
-
 void Window::draw (HDC hdc, const RECT &update_rect) {
 
     if (current_display == nullptr || char_width <= 0 || char_height <= 0)
@@ -518,6 +511,66 @@ void Window::draw (HDC hdc, const RECT &update_rect) {
     }
 
     SelectObject (hdc, hOldFont);
+}
+
+// Invalidate the minimal window rectangle that covers all the characters of
+// the current display marked as modified, then clear the flags; the characters
+// are actually drawn by the WM_PAINT handler
+void Window::invalidate_modified ()
+{
+	if (current_display == nullptr || char_width <= 0 || char_height <= 0)
+	{
+		return;
+	}
+
+	// The bounds of the modified area, in character cells
+	int first_col = INT_MAX, first_row = INT_MAX;
+	int last_col = -1, last_row = -1;
+
+	for (int y = 0; y < static_cast<int>(current_display->data.size ()); ++y)
+	{
+		auto &row = current_display->data[y];
+
+		for (int x = 0; x < static_cast<int>(row.size ()); ++x)
+		{
+			if (!row[x].modified)
+			{
+				continue;
+			}
+
+			if (x < first_col) first_col = x;
+			if (y < first_row) first_row = y;
+			if (x + 1 > last_col) last_col = x + 1;
+			if (y + 1 > last_row) last_row = y + 1;
+		}
+	}
+
+	if (first_col >= last_col)
+	{
+		// No character has been modified - nothing to redraw
+		return;
+	}
+
+	// The modified area in pixels
+	RECT update_rect
+	{
+		first_col * char_width,
+		first_row * char_height,
+		last_col * char_width,
+		last_row * char_height
+	};
+
+	InvalidateRect (hwnd, &update_rect, FALSE);
+
+	// The flags are cleared after the invalidation, so the characters changed
+	// by the next operation are collected into a fresh rectangle
+	for (auto &row : current_display->data)
+	{
+		for (auto &ch : row)
+		{
+			ch.modified = false;
+		}
+	}
 }
 
 } // namespace Wenv::Display

@@ -83,7 +83,7 @@ Display::App_hit Display::find_app_at (::Wenv::Layout::Grid &grid, const std::st
 // Handle a mouse click at the given character coordinates. When a modal is
 // visible only the apps of the modal are examined, otherwise the apps of the
 // current layout; a click on a border is ignored. Returns true when an app
-// handled the click and the whole screen must be redrawn
+// handled the click (the caller invalidates the modified characters)
 bool Display::handle_mouse_click (int x, int y, int modifiers)
 {
 	App_hit hit;
@@ -120,7 +120,8 @@ bool Display::handle_mouse_click (int x, int y, int modifiers)
 	auto handled = hit.app->with_context (hit.context)->handle_click (hit.client_area, position, modifiers);
 
 	// The click handler may have changed app state (selection, sort mode,
-	// focus); the caller redraws the whole display when the click was handled
+	// focus); the caller invalidates the modified characters when the click
+	// was handled
 	return handled;
 }
 

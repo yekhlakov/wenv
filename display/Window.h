@@ -95,11 +95,14 @@ struct Window {
 
     void activate_current ();
 
-    // Draw everything; stands in for a full-client-area update rectangle
-    void draw (HDC hdc);
-
-    // Draw only the characters whose cells intersect the update rectangle
+    // Draw only the characters whose cells intersect the update rectangle;
+    // called from the WM_PAINT handler, the only place drawing to the window
     void draw (HDC hdc, const RECT &update_rect);
+
+    // Invalidate the minimal window rectangle that covers all the characters
+    // of the current display marked as modified, then clear the flags; the
+    // characters are actually drawn by the WM_PAINT handler
+    void invalidate_modified ();
 
     ::Wenv::Layout::Grid *get_grid (const std::string &n);
 
