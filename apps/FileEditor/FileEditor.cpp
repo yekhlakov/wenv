@@ -94,6 +94,44 @@ void FileEditor::redraw (const std::string &path)
 	*left = min (*left, max (0, (int) file->longest_expanded - area.width));
 	*left = max (*left, 0);
 
+	// The editing mode state and the per-file cursor position
+	auto is_editing = get_is_editing ();
+	auto cursor_line = get_file_cursor_line (full_path);
+	auto cursor_pos = get_file_cursor_pos (full_path);
+
+	// The display position of the cursor within its line. The cursor is kept
+	// in the raw (before the tab expansion) coordinates of the file, and a tab
+	// under the cursor is displayed at the beginning of its expansion
+	auto cursor_display_pos = 0;
+
+	if (*is_editing)
+	{
+		cursor_display_pos = get_line_display_pos (*cursor_line, *cursor_pos, tab_width);
+
+		// The viewport follows the cursor: when the cursor is outside the
+		// visible portion, the viewport is shifted so that the cursor stands
+		// at the corresponding edge of it
+		if (*cursor_line < *top)
+		{
+			*top = *cursor_line;
+		}
+
+		if (*cursor_line >= *top + area.height)
+		{
+			*top = *cursor_line - area.height + 1;
+		}
+
+		if (cursor_display_pos < *left)
+		{
+			*left = cursor_display_pos;
+		}
+
+		if (cursor_display_pos >= *left + area.width)
+		{
+			*left = cursor_display_pos - area.width + 1;
+		}
+	}
+
 	int ln = *top;
 	auto it = file->lines.begin ();
 	std::advance (it, min (*top, (int) file->lines.size ()));
@@ -216,17 +254,13 @@ void FileEditor::redraw (const std::string &path)
 	// The text cursor is hidden in the viewing mode; in the editing mode it is
 	// shown at the position computed from the cursor position in the file and
 	// the currently visible portion of it
-	auto is_editing = get_is_editing ();
-	auto cursor_line = get_file_cursor_line (full_path);
-	auto cursor_pos = get_file_cursor_pos (full_path);
-
 	current_display->is_cursor_visible = *is_editing;
 
 	if (*is_editing)
 	{
 		current_display->cursor_position =
 		{
-			area.x + *cursor_pos - *left,
+			area.x + cursor_display_pos - *left,
 			area.y + *cursor_line - *top
 		};
 	}
@@ -271,34 +305,113 @@ bool FileEditor::handle_keydown (unsigned int key, int modifiers)
 
 	auto top = get_file_top_line (full_path);
 	auto left = get_file_left_column (full_path);
+	auto is_editing = get_is_editing ();
 
-	if (key == VK_UP)
+	// The modifier flag of the control key (see Window::current_mods)
+	constexpr int ctrl = 1;
+
+	if (*is_editing)
 	{
-		(*top)--;
-	}
-	else if (key == VK_DOWN)
-	{
-		(*top)++;
-	}
-	else if (key == VK_LEFT)
-	{
-		(*left)--;
-	}
-	else if (key == VK_RIGHT)
-	{
-		(*left)++;
-	}
-	else if (key == VK_PRIOR)
-	{
-		*top -= area.height > 0 ? area.height : 1;
-	}
-	else if (key == VK_NEXT)
-	{
-		*top += area.height > 0 ? area.height : 1;
+		// The editing mode: the keys move the cursor in the raw coordinates
+		// of the file, the viewport follows its display position
+		auto cursor_line = get_file_cursor_line (full_path);
+		auto cursor_pos = get_file_cursor_pos (full_path);
+
+		if (key == VK_UP)
+		{
+			(*cursor_line)--;
+		}
+		else if (key == VK_DOWN)
+		{
+			(*cursor_line)++;
+		}
+		else if (key == VK_LEFT)
+		{
+			(*cursor_pos)--;
+		}
+		else if (key == VK_RIGHT)
+		{
+			(*cursor_pos)++;
+		}
+		else if (key == VK_PRIOR)
+		{
+			*cursor_line -= area.height > 0 ? area.height : 1;
+		}
+		else if (key == VK_NEXT)
+		{
+			*cursor_line += area.height > 0 ? area.height : 1;
+		}
+		else if (key == VK_HOME)
+		{
+			*cursor_pos = 0;
+
+			if (modifiers & ctrl)
+			{
+				*cursor_line = 0;
+			}
+		}
+		else if (key == VK_END)
+		{
+			if (modifiers & ctrl)
+			{
+				auto file = get_file ();
+				auto line_count = file != nullptr ? file->get_line_count () : UNKNOWN_LINE_COUNT;
+
+				// The last line of a not fully loaded file is unknown - the
+				// key is ignored for such files
+				if (line_count == UNKNOWN_LINE_COUNT)
+				{
+					return true;
+				}
+
+				*cursor_line = line_count - 1;
+				*cursor_pos = get_line_length (*cursor_line);
+			}
+			else
+			{
+				*cursor_pos = get_line_length (*cursor_line);
+			}
+		}
+		else
+		{
+			return false;
+		}
+
+		// The cursor cannot go beyond the first line and its first position
+		*cursor_line = max (*cursor_line, 0);
+		*cursor_pos = max (*cursor_pos, 0);
 	}
 	else
 	{
-		return false;
+		// The viewing mode: the keys scroll the viewport
+		if (key == VK_UP)
+		{
+			(*top)--;
+		}
+		else if (key == VK_DOWN)
+		{
+			(*top)++;
+		}
+		else if (key == VK_LEFT)
+		{
+			(*left)--;
+		}
+		else if (key == VK_RIGHT)
+		{
+			(*left)++;
+		}
+		else if (key == VK_PRIOR)
+		{
+			*top -= area.height > 0 ? area.height : 1;
+		}
+		else if (key == VK_NEXT)
+		{
+			*top += area.height > 0 ? area.height : 1;
+		}
+		else
+		{
+			return false;
+		}
 	}
 
 	// The offsets are clamped to the content bounds during redraw
@@ -401,10 +514,50 @@ int * FileEditor::get_file_cursor_line (const std::wstring &full_path)
 
 int * FileEditor::get_file_cursor_pos (const std::wstring &full_path)
 {
-	// The cursor position is counted in display characters of the tab-expanded line
+	// The cursor position is kept in the raw coordinates of the line, before
+	// the tab expansion
 	auto per_file_key = std::string { "cursor-pos:" } + maxy::strings::wchartoutf8 (full_path);
 
 	return current_display->get_persistent_context ()->get<int> (per_file_key, [] () { return new int { 0 }; });
+}
+
+int FileEditor::get_line_length (int line)
+{
+	auto file = get_file ();
+
+	if (file == nullptr || line < 0 || line >= (int) file->lines.size ())
+	{
+		return 0;
+	}
+
+	auto it = file->lines.begin ();
+	std::advance (it, line);
+
+	return (int) it->raw_data.size ();
+}
+
+int FileEditor::get_line_display_pos (int line, int pos, int tab_width)
+{
+	auto file = get_file ();
+
+	// A position on a line that is not in the file (beyond its end) has no
+	// tab expansion to account for; a negative position is clamped to zero
+	if (file == nullptr || line < 0 || line >= (int) file->lines.size () || pos <= 0)
+	{
+		return max (pos, 0);
+	}
+
+	auto it = file->lines.begin ();
+	std::advance (it, line);
+
+	// The display width of the tab-expanded part of the line before the
+	// position, so a tab under the position is displayed at the beginning
+	// of its expansion; the positions beyond the line end occupy one cell each
+	auto raw_len = (int) it->raw_data.size ();
+	auto within = min (pos, raw_len);
+
+	return (int) expand_tabs (it->raw_data.substr (0, within), tab_width).first.size ()
+		+ max (0, pos - raw_len);
 }
 
 }

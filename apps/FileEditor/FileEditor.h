@@ -30,6 +30,16 @@ class FileEditor : public App
 	int * get_file_cursor_line (const std::wstring &full_path);
 	int * get_file_cursor_pos (const std::wstring &full_path);
 
+	// The raw length of the given line of the loaded file, before the tab
+	// expansion; a line beyond the loaded content has length zero
+	int get_line_length (int line);
+
+	// The display position of the given raw position in the given line: the
+	// width of the tab-expanded part of the line before the position. A tab
+	// under the position is displayed at the beginning of its expansion, the
+	// positions beyond the line end occupy one cell each
+	int get_line_display_pos (int line, int pos, int tab_width);
+
 public:
 	FileEditor (const std::wstring &n) : App { n } {}
 
