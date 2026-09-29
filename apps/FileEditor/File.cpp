@@ -60,6 +60,41 @@ void cycle_tab_width (::Wenv::Context *persistent_context)
 	*tab_width = widths[(current + 1) % widths.size ()];
 }
 
+int file_line_length (File *file, int line)
+{
+	if (file == nullptr || line < 0 || line >= (int) file->lines.size ())
+	{
+		return 0;
+	}
+
+	auto it = file->lines.begin ();
+	std::advance (it, line);
+
+	return (int) it->raw_data.size ();
+}
+
+int file_line_display_pos (File *file, int line, int pos, int tab_width)
+{
+	// A position on a line that is not in the file (beyond its end) has no
+	// tab expansion to account for; a negative position is clamped to zero
+	if (file == nullptr || line < 0 || line >= (int) file->lines.size () || pos <= 0)
+	{
+		return max (pos, 0);
+	}
+
+	auto it = file->lines.begin ();
+	std::advance (it, line);
+
+	// The display width of the tab-expanded part of the line before the
+	// position, so a tab under the position is displayed at the beginning
+	// of its expansion; the positions beyond the line end occupy one cell each
+	auto raw_len = (int) it->raw_data.size ();
+	auto within = min (pos, raw_len);
+
+	return (int) expand_tabs (it->raw_data.substr (0, within), tab_width).first.size ()
+		+ max (0, pos - raw_len);
+}
+
 File::File (const std::wstring &file_path)
 	: path { file_path }
 {

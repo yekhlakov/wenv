@@ -18,6 +18,8 @@ class FileEditorStatusBar : public App
 
 	int * get_file_top_line (const std::wstring &full_path);
 	int * get_file_left_column (const std::wstring &full_path);
+	int * get_file_cursor_line (const std::wstring &full_path);
+	int * get_file_cursor_pos (const std::wstring &full_path);
 
 public:
 	FileEditorStatusBar (const std::wstring &n) : App { n } {}

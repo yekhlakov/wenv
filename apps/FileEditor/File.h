@@ -33,6 +33,18 @@ int * get_tab_width (::Wenv::Context *persistent_context);
 // Set the next tab width of the given persistent context: 4 -> 8 -> 2 -> 4 ...
 void cycle_tab_width (::Wenv::Context *persistent_context);
 
+class File;
+
+// The raw length of the given line of the file, before the tab expansion;
+// a line beyond the loaded content has length zero
+int file_line_length (File *file, int line);
+
+// The display position of the given raw position in the given line: the width
+// of the tab-expanded part of the line before the position. A tab under the
+// position is displayed at the beginning of its expansion, the positions
+// beyond the line end occupy one cell each
+int file_line_display_pos (File *file, int line, int pos, int tab_width);
+
 class File
 {
 	std::wstring path;
@@ -60,6 +72,10 @@ public:
 	std::uint64_t get_file_size () const { return total_size; }
 	int get_line_count () const { return fully_loaded ? (int) lines.size () : UNKNOWN_LINE_COUNT; }
 
+	// Expand the line with the current tab width and widen longest_expanded
+	// accordingly; must be called after the line content has changed
+	void measure (const FileLine &line);
+
 	// Widen longest_expanded to the given tab width, re-measuring the loaded
 	// content when the width differs from the one it was measured with
 	void set_tab_width (int tab_width);
@@ -69,9 +85,6 @@ public:
 	void ensure_loaded (int top_line, int visible_height);
 
 private:
-	// Expand the line with the current tab width and widen longest_expanded accordingly
-	void measure (const FileLine &line);
-
 	void load_more ();
 };
 

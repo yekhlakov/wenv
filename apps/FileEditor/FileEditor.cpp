@@ -106,7 +106,7 @@ void FileEditor::redraw (const std::string &path)
 
 	if (*is_editing)
 	{
-		cursor_display_pos = get_line_display_pos (*cursor_line, *cursor_pos, tab_width);
+		cursor_display_pos = file_line_display_pos (file, *cursor_line, *cursor_pos, tab_width);
 
 		// The viewport follows the cursor: when the cursor is outside the
 		// visible portion, the viewport is shifted so that the cursor stands
@@ -129,6 +129,30 @@ void FileEditor::redraw (const std::string &path)
 		if (cursor_display_pos >= *left + area.width)
 		{
 			*left = cursor_display_pos - area.width + 1;
+		}
+	}
+
+	// The end-of-file marker is shown when the whole file has been loaded: on
+	// the empty line after the content when the file ends with a newline (the
+	// loader keeps it as the trailing empty line), past the content of the
+	// last line otherwise
+	int eof_line = -1;
+	int eof_col = 0;
+
+	if (line_count != UNKNOWN_LINE_COUNT)
+	{
+		if (file->lines.empty ())
+		{
+			eof_line = 0;
+		}
+		else
+		{
+			eof_line = (int) file->lines.size () - 1;
+
+			if (!file->lines.back ().raw_data.empty ())
+			{
+				eof_col = (int) expand_tabs (file->lines.back ().raw_data, tab_width).first.size ();
+			}
 		}
 	}
 
@@ -237,6 +261,34 @@ void FileEditor::redraw (const std::string &path)
 			}
 		}
 
+		// The end-of-file marker past the content of the last line
+		if (area.width > 0 && *top + row == eof_line)
+		{
+			auto marker_screen_x = eof_col - *left;
+
+			if (marker_screen_x < area.width)
+			{
+				auto marker = std::wstring { L"<EOF>" };
+
+				// Only the visible part of the marker is drawn
+				if (marker_screen_x < 0)
+				{
+					marker = marker.substr ((size_t) -marker_screen_x);
+					marker_screen_x = 0;
+				}
+
+				marker = marker.substr (0, min ((int) marker.size (), area.width - marker_screen_x));
+
+				if (!drew_dark)
+				{
+					current_display->with_color (::Wenv::Display::Palette::Dark_element_color);
+					drew_dark = true;
+				}
+
+				current_display->print_line (area.x + marker_screen_x, r.y, marker);
+			}
+		}
+
 		// Colorize the truncation ellipsis with the active palette color
 		if (truncated)
 		{
@@ -317,6 +369,10 @@ bool FileEditor::handle_keydown (unsigned int key, int modifiers)
 		auto cursor_line = get_file_cursor_line (full_path);
 		auto cursor_pos = get_file_cursor_pos (full_path);
 
+		// The movement keys always succeed; the text editing keys report
+		// whether they actually changed anything
+		bool handled = true;
+
 		if (key == VK_UP)
 		{
 			(*cursor_line)--;
@@ -365,14 +421,32 @@ bool FileEditor::handle_keydown (unsigned int key, int modifiers)
 				}
 
 				*cursor_line = line_count - 1;
-				*cursor_pos = get_line_length (*cursor_line);
+				*cursor_pos = file_line_length (get_file (), *cursor_line);
 			}
 			else
 			{
-				*cursor_pos = get_line_length (*cursor_line);
+				*cursor_pos = file_line_length (get_file (), *cursor_line);
 			}
 		}
+		else if (key == VK_BACK)
+		{
+			// Backspace removes the character just before the cursor
+			handled = backspace_at_cursor (cursor_line, cursor_pos);
+		}
+		else if (key == VK_DELETE)
+		{
+			// Delete removes the character at the cursor
+			handled = delete_at_cursor (cursor_line, cursor_pos);
+		}
 		else
+		{
+			// A regular keypress: convert the key to its unicode character
+			// and insert it into the text at the cursor position
+			handled = insert_typed_char (key, modifiers, cursor_line, cursor_pos);
+		}
+
+		// A no-op text editing key is reported as unhandled
+		if (!handled)
 		{
 			return false;
 		}
@@ -418,6 +492,243 @@ bool FileEditor::handle_keydown (unsigned int key, int modifiers)
 	redraw_all (path);
 
 	return true;
+}
+
+// The iterator to the given line of the file; the line must exist
+static std::list<FileLine>::iterator line_iterator (File *file, int line)
+{
+	auto it = file->lines.begin ();
+	std::advance (it, line);
+	return it;
+}
+
+// True when the byte is a utf-8 continuation byte (10xxxxxx)
+static bool is_utf8_continuation (char byte)
+{
+	return ((unsigned char) byte & 0xC0) == 0x80;
+}
+
+// The byte length of the utf-8 character sequence starting with the given
+// lead byte; a malformed lead byte is treated as a single byte
+static int utf8_char_length (char lead)
+{
+	auto b = (unsigned char) lead;
+
+	if ((b & 0xE0) == 0xC0)
+	{
+		return 2;
+	}
+
+	if ((b & 0xF0) == 0xE0)
+	{
+		return 3;
+	}
+
+	if ((b & 0xF8) == 0xF0)
+	{
+		return 4;
+	}
+
+	return 1;
+}
+
+bool FileEditor::insert_typed_char (unsigned int key, int modifiers, int *cursor_line, int *cursor_pos)
+{
+	// Keys with ctrl or alt held are shortcuts, not text input
+	constexpr int ctrl = 1;
+	constexpr int alt = 4;
+
+	if (modifiers & ctrl || modifiers & alt)
+	{
+		return false;
+	}
+
+	// The key to character conversion uses the shift state of the modifiers
+	BYTE keys[256] = {};
+	if (modifiers & 2)
+	{
+		keys[VK_SHIFT] = 0x80;
+	}
+
+	wchar_t chars[8] = {};
+	auto converted = ToUnicode (key, 0, keys, chars, (int) std::size (chars), 0);
+
+	// Zero characters for keys that produce no text, negative for dead keys
+	if (converted <= 0)
+	{
+		return false;
+	}
+
+	auto file = get_file ();
+
+	if (file == nullptr)
+	{
+		return false;
+	}
+
+	// The cursor past the end of file: empty lines are appended so that the
+	// cursor line exists and is the last of them
+	while (*cursor_line >= (int) file->lines.size ())
+	{
+		file->lines.push_back ({});
+	}
+
+	auto it = line_iterator (file, *cursor_line);
+
+	// The cursor past the end of the line: the line is padded with spaces up
+	// to the position just before the cursor so that the inserted character
+	// becomes the last character of the line
+	if (*cursor_pos > (int) it->raw_data.size ())
+	{
+		it->raw_data.append (*cursor_pos - (int) it->raw_data.size (), ' ');
+	}
+
+	for (int i = 0; i < converted; i++)
+	{
+		auto ch = chars[i];
+
+		if (ch == L'\r' || ch == L'\n')
+		{
+			// The enter key produces a newline: the line is split at the
+			// cursor, the part after the cursor becomes the new line
+			auto split = (size_t) min (*cursor_pos, (int) it->raw_data.size ());
+			auto tail = it->raw_data.substr (split);
+
+			it->raw_data.resize (split);
+			it = file->lines.insert (std::next (it), { tail });
+
+			(*cursor_line)++;
+			*cursor_pos = 0;
+		}
+		else
+		{
+			// The character is inserted as utf-8 just before the character
+			// that was under the cursor
+			auto utf8 = maxy::strings::wchartoutf8 (std::wstring { ch });
+			auto pos = (size_t) min (*cursor_pos, (int) it->raw_data.size ());
+
+			it->raw_data.insert (pos, utf8);
+			*cursor_pos += (int) utf8.size ();
+		}
+
+		// The edited line may have become the longest one
+		file->measure (*it);
+	}
+
+	return true;
+}
+
+bool FileEditor::backspace_at_cursor (int *cursor_line, int *cursor_pos)
+{
+	auto file = get_file ();
+
+	// Nothing to remove before the beginning of the file or beyond the
+	// loaded content
+	if (file == nullptr || file->lines.empty () || *cursor_line >= (int) file->lines.size ())
+	{
+		return false;
+	}
+
+	auto it = line_iterator (file, *cursor_line);
+	auto pos = min (*cursor_pos, (int) it->raw_data.size ());
+
+	// The cursor at the beginning of the line: the preceding newline is
+	// removed, concatenating the line to the previous one
+	if (pos == 0)
+	{
+		// The first line has no preceding newline
+		if (*cursor_line == 0)
+		{
+			return false;
+		}
+
+		auto prev = std::prev (it);
+		auto prev_length = (int) prev->raw_data.size ();
+
+		prev->raw_data += it->raw_data;
+		file->lines.erase (it);
+
+		// The merged line may have become the longest one
+		file->measure (*prev);
+
+		(*cursor_line)--;
+		*cursor_pos = prev_length;
+
+		return true;
+	}
+
+	// The character just before the cursor starts at the first byte that is
+	// not a utf-8 continuation byte when scanning back from the cursor (at
+	// most three of them may belong to one character)
+	auto start = pos - 1;
+	while (start > 0 && pos - start < 4 && is_utf8_continuation (it->raw_data[start]))
+	{
+		start--;
+	}
+
+	it->raw_data.erase (start, pos - start);
+	*cursor_pos = start;
+
+	return true;
+}
+
+bool FileEditor::delete_at_cursor (int *cursor_line, int *cursor_pos)
+{
+	auto file = get_file ();
+
+	// Nothing to remove beyond the loaded content
+	if (file == nullptr || file->lines.empty () || *cursor_line >= (int) file->lines.size ())
+	{
+		return false;
+	}
+
+	auto it = line_iterator (file, *cursor_line);
+	auto pos = min (*cursor_pos, (int) it->raw_data.size ());
+
+	// The character at the cursor: its utf-8 byte sequence is removed
+	if (pos < (int) it->raw_data.size ())
+	{
+		it->raw_data.erase (pos, utf8_char_length (it->raw_data[pos]));
+		*cursor_pos = pos;
+
+		return true;
+	}
+
+	// The cursor is at or past the end of the line: the newline of the line
+	// is removed, concatenating the next line to this one
+	if (*cursor_line < (int) file->lines.size () - 1)
+	{
+		auto next = std::next (it);
+
+		it->raw_data += next->raw_data;
+		file->lines.erase (next);
+
+		// The merged line may have become the longest one
+		file->measure (*it);
+
+		// The cursor stays at the junction of the concatenated lines
+		*cursor_pos = pos;
+
+		return true;
+	}
+
+	// The cursor is at the end of the last line of a fully loaded file: the
+	// trailing newline of the file is represented by the trailing empty line,
+	// removing it concatenates the file without the newline
+	if (file->is_fully_loaded () && file->lines.size () >= 2 && it->raw_data.empty ())
+	{
+		auto prev = std::prev (it);
+		auto prev_length = (int) prev->raw_data.size ();
+
+		file->lines.erase (it);
+
+		*cursor_line = (int) file->lines.size () - 1;
+		*cursor_pos = prev_length;
+
+		return true;
+	}
+
+	return false;
 }
 
 void FileEditor::redraw_all (const std::string &path)
@@ -519,45 +830,6 @@ int * FileEditor::get_file_cursor_pos (const std::wstring &full_path)
 	auto per_file_key = std::string { "cursor-pos:" } + maxy::strings::wchartoutf8 (full_path);
 
 	return current_display->get_persistent_context ()->get<int> (per_file_key, [] () { return new int { 0 }; });
-}
-
-int FileEditor::get_line_length (int line)
-{
-	auto file = get_file ();
-
-	if (file == nullptr || line < 0 || line >= (int) file->lines.size ())
-	{
-		return 0;
-	}
-
-	auto it = file->lines.begin ();
-	std::advance (it, line);
-
-	return (int) it->raw_data.size ();
-}
-
-int FileEditor::get_line_display_pos (int line, int pos, int tab_width)
-{
-	auto file = get_file ();
-
-	// A position on a line that is not in the file (beyond its end) has no
-	// tab expansion to account for; a negative position is clamped to zero
-	if (file == nullptr || line < 0 || line >= (int) file->lines.size () || pos <= 0)
-	{
-		return max (pos, 0);
-	}
-
-	auto it = file->lines.begin ();
-	std::advance (it, line);
-
-	// The display width of the tab-expanded part of the line before the
-	// position, so a tab under the position is displayed at the beginning
-	// of its expansion; the positions beyond the line end occupy one cell each
-	auto raw_len = (int) it->raw_data.size ();
-	auto within = min (pos, raw_len);
-
-	return (int) expand_tabs (it->raw_data.substr (0, within), tab_width).first.size ()
-		+ max (0, pos - raw_len);
 }
 
 }

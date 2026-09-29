@@ -53,36 +53,57 @@ void FileEditorStatusBar::redraw (const std::string &path)
 	// The tab width is a persistent setting, shared with the editor
 	auto tab_width = *get_tab_width (current_display->get_persistent_context ());
 
-	// Right-aligned information
-	std::wstring right;
+	// The right-aligned information is composed of text parts, the ones
+	// flagged true are drawn in the dark color
+	std::vector<std::pair<std::wstring, bool>> parts;
+
 	if (file != nullptr)
 	{
 		auto line_count = file->get_line_count ();
 		auto loaded_count = (int) file->lines.size ();
-		auto line_num = min (*top + 1, loaded_count);
 
-		if (line_count == UNKNOWN_LINE_COUNT)
+		// The total line count part: the real count of a fully loaded file,
+		// a question mark otherwise
+		auto count_part = line_count != UNKNOWN_LINE_COUNT
+			? std::format (L"/{}", line_count)
+			: L"/?";
+
+		if (*is_editing)
 		{
-			right = std::format
-			(
-				L"  {}  {}/?  Col {}  T{}",
-				std::format (L"{} B", file->get_file_size ()),
-				line_num,
-				*left + 1,
-				tab_width
-			);
+			auto cursor_line = get_file_cursor_line (full_path);
+			auto cursor_pos = get_file_cursor_pos (full_path);
+
+			// The position of the cursor in display coordinates
+			auto display_pos = file_line_display_pos (file, *cursor_line, *cursor_pos, tab_width);
+
+			// The cursor past the last line of a fully loaded file or past
+			// the end of its current line makes the number dark
+			auto past_last_line = line_count != UNKNOWN_LINE_COUNT && *cursor_line >= line_count;
+			auto past_line_end = *cursor_pos > file_line_length (file, *cursor_line);
+
+			parts =
+			{
+				{ std::format (L"  {} B  ", file->get_file_size ()), false },
+				{ std::format (L"{}", *cursor_line + 1), past_last_line },
+				{ count_part, false },
+				{ L"  Col ", false },
+				{ std::format (L"{}", display_pos + 1), past_line_end },
+				{ std::format (L"  T{}", tab_width), false }
+			};
 		}
 		else
 		{
-			right = std::format
-			(
-				L"  {}  {}/{}  Col {}  T{}",
-				std::format (L"{} B", file->get_file_size ()),
-				line_num,
-				line_count,
-				*left + 1,
-				tab_width
-			);
+			// The viewing mode shows the position of the viewport
+			auto line_num = min (*top + 1, loaded_count);
+
+			parts =
+			{
+				{ std::format (L"  {} B  ", file->get_file_size ()), false },
+				{ std::format (L"{}", line_num), false },
+				{ count_part, false },
+				{ std::format (L"  Col {}", *left + 1), false },
+				{ std::format (L"  T{}", tab_width), false }
+			};
 		}
 	}
 
@@ -114,14 +135,27 @@ void FileEditorStatusBar::redraw (const std::string &path)
 
 	current_display->print_line (area.x + 1, area.y, full_path);
 
-	current_display->with_color (::Wenv::Display::Palette::Default_color, true);
+	// The parts are drawn sequentially from the right edge of the bar
+	auto total_width = 0;
 
-	current_display->print_line
-	(
-		area,
-		right,
-		current_display->PF_TOP | current_display->PF_RIGHT
-	);
+	for (auto &part : parts)
+	{
+		total_width += (int) part.first.size ();
+	}
+
+	auto x = area.x + area.width - total_width;
+
+	for (auto &[text, dark] : parts)
+	{
+		current_display->with_color
+		(
+			dark ? ::Wenv::Display::Palette::Dark_element_color : ::Wenv::Display::Palette::Default_color,
+			true
+		);
+
+		current_display->print_line (x, area.y, text);
+		x += (int) text.size ();
+	}
 }
 
 std::wstring * FileEditorStatusBar::get_edit_target ()
@@ -165,6 +199,24 @@ int * FileEditorStatusBar::get_file_left_column (const std::wstring &full_path)
 {
 	// A freshly opened file starts at the leftmost column
 	auto per_file_key = std::string { "left-col:" } + maxy::strings::wchartoutf8 (full_path);
+
+	return current_display->get_persistent_context ()->get<int> (per_file_key, [] () { return new int { 0 }; });
+}
+
+int * FileEditorStatusBar::get_file_cursor_line (const std::wstring &full_path)
+{
+	// The per-file cursor position is kept in the persistent context under
+	// keys derived from the file path (see the editor)
+	auto per_file_key = std::string { "cursor-line:" } + maxy::strings::wchartoutf8 (full_path);
+
+	return current_display->get_persistent_context ()->get<int> (per_file_key, [] () { return new int { 0 }; });
+}
+
+int * FileEditorStatusBar::get_file_cursor_pos (const std::wstring &full_path)
+{
+	// The cursor position is kept in the raw coordinates of the line, before
+	// the tab expansion
+	auto per_file_key = std::string { "cursor-pos:" } + maxy::strings::wchartoutf8 (full_path);
 
 	return current_display->get_persistent_context ()->get<int> (per_file_key, [] () { return new int { 0 }; });
 }

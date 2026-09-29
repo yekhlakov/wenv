@@ -228,7 +228,10 @@ void Window::initialize ()
 
         grid->add_block ({ 0, 0, 1, 1 }, 2, medium_panel, nullptr, left_context);
         grid->add_block ({ 1, 0, 1, 1 }, 2, medium_panel, nullptr, right_context);
-        grid->add_block ({ 0, 1, 2, 1 }, -1, nullptr, func_menu);
+        // The func menu block must carry the main context: the enclosing grid
+        // has none, so without it the menu draws with no context and shows
+        // only the bare key numbers
+        grid->add_block ({ 0, 1, 2, 1 }, -1, nullptr, func_menu, main_context);
 
         add_display("file-manager", d);
 

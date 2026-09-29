@@ -39,10 +39,21 @@ class FuncMenu : public App
 	// area instead of resolving it from a caller-supplied path
 	::Wenv::Display::Rect own_area;
 
+	// The tracked state of the modifier keys: the menu follows their
+	// keydown/keyup events and shows the command list of the current
+	// combination
+	bool tracked_ctrl = false;
+	bool tracked_alt = false;
+	bool tracked_shift = false;
+
 	// Fetch the command list for the given modifier combination from the
 	// current context. A missing context or a missing element yields an
 	// empty list.
 	std::vector<FuncMenuCommand> &get_list (FuncMenuCommandList list);
+
+	// Update the tracked state of the modifier the given key belongs to and
+	// redraw the bar when the tracked combination changes
+	bool track_modifier (unsigned int key, bool pressed);
 
 	// The per-parameter accessors to the current context (see the .cpp)
 	std::vector<App *> * get_app_group ();

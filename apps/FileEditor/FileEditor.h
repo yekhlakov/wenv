@@ -30,15 +30,21 @@ class FileEditor : public App
 	int * get_file_cursor_line (const std::wstring &full_path);
 	int * get_file_cursor_pos (const std::wstring &full_path);
 
-	// The raw length of the given line of the loaded file, before the tab
-	// expansion; a line beyond the loaded content has length zero
-	int get_line_length (int line);
+	// Convert the typed key into its unicode character and insert it into the
+	// edited file at the cursor position; returns false when the key produced
+	// no text
+	bool insert_typed_char (unsigned int key, int modifiers, int *cursor_line, int *cursor_pos);
 
-	// The display position of the given raw position in the given line: the
-	// width of the tab-expanded part of the line before the position. A tab
-	// under the position is displayed at the beginning of its expansion, the
-	// positions beyond the line end occupy one cell each
-	int get_line_display_pos (int line, int pos, int tab_width);
+	// Remove the character just before the cursor, concatenating the line to
+	// the previous one when the cursor is at its beginning; returns false
+	// when there is nothing to remove
+	bool backspace_at_cursor (int *cursor_line, int *cursor_pos);
+
+	// Remove the character at the cursor, concatenating the next line to this
+	// one when the cursor is at or past the line end (the trailing newline of
+	// the file when the cursor is past the end of file); returns false when
+	// there is nothing to remove
+	bool delete_at_cursor (int *cursor_line, int *cursor_pos);
 
 public:
 	FileEditor (const std::wstring &n) : App { n } {}

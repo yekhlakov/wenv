@@ -23,6 +23,21 @@ static const char * command_list_name (FuncMenuCommandList list)
 	}
 }
 
+// Which modifier (if any) the given virtual key belongs to:
+// 1 = ctrl, 2 = shift, 4 = alt; 0 when the key is not a modifier.
+// The generic codes and the left/right-specific ones are matched alike,
+// as the key messages carry the specific variants
+static int modifier_bit (unsigned int key)
+{
+	switch (key)
+	{
+	case VK_CONTROL: case VK_LCONTROL: case VK_RCONTROL: return 1;
+	case VK_SHIFT: case VK_LSHIFT: case VK_RSHIFT: return 2;
+	case VK_MENU: case VK_LMENU: case VK_RMENU: return 4;
+	default: return 0;
+	}
+}
+
 std::vector<FuncMenuCommand> &FuncMenu::get_list (FuncMenuCommandList list)
 {
 	// A missing context means the menu shows the bare function key numbers
@@ -43,44 +58,66 @@ std::vector<FuncMenuCommand> &FuncMenu::get_list (FuncMenuCommandList list)
 
 FuncMenuCommandList FuncMenu::get_active_command_list () const
 {
-	if (current_display == nullptr)
-	{
-		return FuncMenuCommandList::Default;
-	}
-
-	// The pressed modifiers decide which command list is shown.
-	// The combinations without their own lists (alt+shift, ctrl+alt+shift)
-	// fall back to the closest list above them.
-	auto ctrl = current_display->get_key_state (VK_CONTROL);
-	auto alt = current_display->get_key_state (VK_MENU);
-	auto shift = current_display->get_key_state (VK_SHIFT);
-
-	if (ctrl && alt)
+	// The tracked state of the modifier keys decides which command list is
+	// shown. The combinations without their own lists (alt+shift,
+	// ctrl+alt+shift) fall back to the closest list above them.
+	if (tracked_ctrl && tracked_alt)
 	{
 		return FuncMenuCommandList::CtrlAlt;
 	}
 
-	if (ctrl && shift)
+	if (tracked_ctrl && tracked_shift)
 	{
 		return FuncMenuCommandList::CtrlShift;
 	}
 
-	if (ctrl)
+	if (tracked_ctrl)
 	{
 		return FuncMenuCommandList::Ctrl;
 	}
 
-	if (alt)
+	if (tracked_alt)
 	{
 		return FuncMenuCommandList::Alt;
 	}
 
-	if (shift)
+	if (tracked_shift)
 	{
 		return FuncMenuCommandList::Shift;
 	}
 
 	return FuncMenuCommandList::Default;
+}
+
+// Update the tracked state of the modifier the given key belongs to and
+// redraw the bar when the tracked combination changes; the auto-repeated
+// presses of a held key do not change it
+bool FuncMenu::track_modifier (unsigned int key, bool pressed)
+{
+	auto changed = false;
+
+	if (modifier_bit (key) & 1)
+	{
+		changed = tracked_ctrl != pressed;
+		tracked_ctrl = pressed;
+	}
+	else if (modifier_bit (key) & 2)
+	{
+		changed = tracked_shift != pressed;
+		tracked_shift = pressed;
+	}
+	else if (modifier_bit (key) & 4)
+	{
+		changed = tracked_alt != pressed;
+		tracked_alt = pressed;
+	}
+
+	if (changed)
+	{
+		redraw ("");
+	}
+
+	return true;
 }
 
 void FuncMenu::draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area)
@@ -136,7 +173,47 @@ void FuncMenu::redraw (const std::string &path)
 
 bool FuncMenu::handle_click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers)
 {
-	return false;
+	if (current_display == nullptr || current_context == nullptr)
+	{
+		return false;
+	}
+
+	// The bar is split into twelve key slots of even width (as during the
+	// drawing); the trailing space past the twelfth slot belongs to the last key
+	auto slot_width = client_area.width / 12;
+
+	if (slot_width < 1 || position.x < 0)
+	{
+		return false;
+	}
+
+	auto index = position.x / slot_width;
+
+	if (index > 11)
+	{
+		index = 11;
+	}
+
+	// Only a command that is defined and currently displayed can be invoked
+	auto &active_commands = get_list (get_active_command_list ());
+
+	if (index >= (int) active_commands.size () || active_commands[index].name.empty () || !active_commands[index].action)
+	{
+		return false;
+	}
+
+	// The command runs exactly like the pressed key combo: the menu binds the
+	// focused context, so the action and the following redraw observe the same
+	// state the keydown handler would
+	if (current_display->focused_context != nullptr)
+	{
+		with_context (current_display->focused_context);
+	}
+
+	active_commands[index].action (current_display, current_context);
+	redraw_all ();
+
+	return true;
 }
 
 bool FuncMenu::handle_keydown (unsigned int key, int modifiers)
@@ -144,6 +221,13 @@ bool FuncMenu::handle_keydown (unsigned int key, int modifiers)
 	if (current_display == nullptr || current_context == nullptr)
 	{
 		return false;
+	}
+
+	// The modifier keypresses are consumed by the tracking and make the bar
+	// display the command list of the new combination
+	if (modifier_bit (key) != 0)
+	{
+		return track_modifier (key, true);
 	}
 
 	// Run the command bound to the pressed function key, if any.
@@ -175,6 +259,17 @@ bool FuncMenu::handle_keydown (unsigned int key, int modifiers)
 
 bool FuncMenu::handle_keyup (unsigned int key, int modifiers)
 {
+	if (current_display == nullptr || current_context == nullptr)
+	{
+		return false;
+	}
+
+	// The release of a modifier key also changes the tracked combination
+	if (modifier_bit (key) != 0)
+	{
+		return track_modifier (key, false);
+	}
+
 	return false;
 }
 
