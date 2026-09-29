@@ -8,6 +8,9 @@ namespace Wenv::Apps
 
 class File;
 
+// Toggle the editing mode flag of the file editor kept in the given context
+void toggle_editing_mode (::Wenv::Context *context);
+
 class FileEditor : public App
 {
 	// The per-parameter accessors to the current context. They keep the
@@ -20,9 +23,12 @@ class FileEditor : public App
 	App * get_status_bar ();
 	std::string * get_focused_path ();
 	std::vector<App *> * get_app_group ();
+	bool * get_is_editing ();
 
 	int * get_file_top_line (const std::wstring &full_path);
 	int * get_file_left_column (const std::wstring &full_path);
+	int * get_file_cursor_line (const std::wstring &full_path);
+	int * get_file_cursor_pos (const std::wstring &full_path);
 
 public:
 	FileEditor (const std::wstring &n) : App { n } {}

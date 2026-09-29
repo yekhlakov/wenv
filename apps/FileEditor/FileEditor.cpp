@@ -12,6 +12,20 @@
 namespace Wenv::Apps
 {
 
+void toggle_editing_mode (::Wenv::Context *context)
+{
+	if (context == nullptr)
+	{
+		return;
+	}
+
+	// The flag is stored in the editor context; a file that has just been
+	// opened is viewed, not edited
+	auto is_editing = context->get<bool> ("is_editing", [] () { return new bool { false }; });
+
+	*is_editing = !*is_editing;
+}
+
 void FileEditor::draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area)
 {
 	App::draw (display, path, client_area);
@@ -199,6 +213,24 @@ void FileEditor::redraw (const std::string &path)
 		}
 	}
 
+	// The text cursor is hidden in the viewing mode; in the editing mode it is
+	// shown at the position computed from the cursor position in the file and
+	// the currently visible portion of it
+	auto is_editing = get_is_editing ();
+	auto cursor_line = get_file_cursor_line (full_path);
+	auto cursor_pos = get_file_cursor_pos (full_path);
+
+	current_display->is_cursor_visible = *is_editing;
+
+	if (*is_editing)
+	{
+		current_display->cursor_position =
+		{
+			area.x + *cursor_pos - *left,
+			area.y + *cursor_line - *top
+		};
+	}
+
 	// Update the status bar
 	auto status = get_status_bar ();
 	if (status != nullptr)
@@ -346,6 +378,31 @@ int * FileEditor::get_file_left_column (const std::wstring &full_path)
 {
 	// A freshly opened file starts at the leftmost column
 	auto per_file_key = std::string { "left-col:" } + maxy::strings::wchartoutf8 (full_path);
+
+	return current_display->get_persistent_context ()->get<int> (per_file_key, [] () { return new int { 0 }; });
+}
+
+bool * FileEditor::get_is_editing ()
+{
+	// Default: a file that has just been opened is viewed, not edited. The
+	// state is set from outside (the file manager or the F6 command)
+	return current_context->get<bool> ("is_editing", [] () { return new bool { false }; });
+}
+
+int * FileEditor::get_file_cursor_line (const std::wstring &full_path)
+{
+	// The per-file cursor position is kept in the persistent context under
+	// keys derived from the file path; a freshly opened file starts with the
+	// cursor on the first character of the first line
+	auto per_file_key = std::string { "cursor-line:" } + maxy::strings::wchartoutf8 (full_path);
+
+	return current_display->get_persistent_context ()->get<int> (per_file_key, [] () { return new int { 0 }; });
+}
+
+int * FileEditor::get_file_cursor_pos (const std::wstring &full_path)
+{
+	// The cursor position is counted in display characters of the tab-expanded line
+	auto per_file_key = std::string { "cursor-pos:" } + maxy::strings::wchartoutf8 (full_path);
 
 	return current_display->get_persistent_context ()->get<int> (per_file_key, [] () { return new int { 0 }; });
 }

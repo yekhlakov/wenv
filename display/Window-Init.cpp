@@ -69,8 +69,9 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_default_commands ()
 
 // Build the default func menu command list of the file editor: in addition to
 // the common F10 "Exit" it has the F3 "TabSz" command, which cycles the tab
-// width of the editor. The func menu redraws the apps of the context after a
-// command has run, so the new width shows up in the editor and its status bar
+// width of the editor, and the F6 "Edt/Vw" command, which toggles the editing
+// mode of the editor. The func menu redraws the apps of the context after a
+// command has run, so the mode change shows up in the editor and its status bar
 std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_editor_commands ()
 {
 	auto commands = make_func_menu_default_commands ();
@@ -81,6 +82,15 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_editor_commands
 		[] (::Wenv::Display::Display *display, ::Wenv::Context *)
 		{
 			::Wenv::Apps::cycle_tab_width (display->get_persistent_context ());
+		}
+	};
+
+	(*commands)[5] = {
+		L"Edt/Vw",
+
+		[] (::Wenv::Display::Display *, ::Wenv::Context *context)
+		{
+			::Wenv::Apps::toggle_editing_mode (context);
 		}
 	};
 
@@ -279,8 +289,8 @@ void Window::initialize ()
         grid->context->set ("status-bar", status);
 	grid->context->set ("func-menu", func_menu);
 
-	// The default command list of the editor: F3 cycles the tab width,
-	// F10 exits the display
+	// The default command list of the editor: F3 cycles the tab width, F6
+	// toggles the editing mode, F10 exits the display
 	grid->context->set ("func_menu.default", make_func_menu_file_editor_commands ());
 
         d->grid = grid;
