@@ -214,23 +214,22 @@ void FileEditor::redraw (const std::string &path)
 		if (!expanded.empty ())
 		{
 			auto last_non_space = expanded.find_last_not_of (L' ');
-			if (last_non_space != std::wstring::npos)
+
+			// An all-whitespace line is all trailing spaces
+			int trailing_start = last_non_space == std::wstring::npos ? 0 : (int) last_non_space + 1;
+			int trailing_count = (int) expanded.size () - trailing_start;
+
+			if (trailing_count > 0)
 			{
-				int trailing_start = (int) last_non_space + 1;
-				int trailing_count = (int) expanded.size () - trailing_start;
+				current_display->with_color (::Wenv::Display::Palette::Dark_element_color);
+				drew_dark = true;
 
-				if (trailing_count > 0)
+				for (int i = 0; i < trailing_count; i++)
 				{
-					current_display->with_color (::Wenv::Display::Palette::Dark_element_color);
-					drew_dark = true;
-
-					for (int i = 0; i < trailing_count; i++)
+					int screen_x = trailing_start + i - *left;
+					if (screen_x >= 0 && screen_x < area.width)
 					{
-						int screen_x = trailing_start + i - *left;
-						if (screen_x >= 0 && screen_x < area.width)
-						{
-							current_display->print_char (area.x + screen_x, r.y, L'\u00B7');
-						}
+						current_display->print_char (area.x + screen_x, r.y, L'\u00B7');
 					}
 				}
 			}
@@ -263,7 +262,7 @@ void FileEditor::redraw (const std::string &path)
 					(
 						tab_rect,
 						L"\u2192",
-						current_display->PF_RIGHT | current_display->PF_VCENTER | current_display->PF_ERASE_BACKGROUND
+						current_display->PF_LEFT | current_display->PF_VCENTER | current_display->PF_ERASE_BACKGROUND
 					);
 				}
 			}
