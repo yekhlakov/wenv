@@ -79,6 +79,12 @@ struct Window {
     void add_display (const std::string &n, Display *d);
     void set_display (const std::string & n);
     bool pop_display ();
+
+    // Close the current display: it is popped from the display stack, or the
+    // whole window is destroyed when it is the last one; the restored display
+    // is repainted
+    void close_current_display ();
+
     Display *get_display (const std::string &n);
 
     // Window message handlers

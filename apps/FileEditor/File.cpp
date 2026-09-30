@@ -11,6 +11,48 @@ namespace Wenv::Apps
 
 static constexpr std::uint64_t ONE_MB = 1024 * 1024;
 
+// Append the lines contained in the raw chunk to the lines, continuing the
+// given partial line; the trailing partial line (without a newline) is left
+// in cur. Each complete line keeps the newline it was followed by. A
+// carriage return at the very end of the chunk is kept in cur when more
+// data may follow, since it may be the first byte of a newline spanning
+// the chunk boundary; a carriage return not followed by a newline is
+// dropped
+static void split_lines (std::list<FileLine> &lines, const std::string &raw, std::string &cur, bool more_to_come)
+{
+	for (size_t i = 0; i < raw.size (); )
+	{
+		auto c = raw[i];
+
+		if (c == '\r' && i + 1 < raw.size () && raw[i + 1] == '\n')
+		{
+			lines.push_back ({ cur, "\r\n" });
+			cur.clear ();
+			i += 2;
+		}
+		else if (c == '\n')
+		{
+			lines.push_back ({ cur, "\n" });
+			cur.clear ();
+			i++;
+		}
+		else
+		{
+			if (c != '\r')
+			{
+				cur += c;
+			}
+
+			i++;
+		}
+	}
+
+	if (more_to_come && !raw.empty () && raw.back () == '\r')
+	{
+		cur += '\r';
+	}
+}
+
 std::pair<std::wstring, std::vector<std::pair<int, int>>> expand_tabs (const std::string &line, int tab_width)
 {
 	auto wide = maxy::strings::utf8towchar (line);
@@ -225,23 +267,16 @@ File::File (const std::wstring &file_path)
 		raw.erase (0, 3);
 	}
 
+	// Determine the newline of the file before the line splitting
+	detect_newline (raw);
+
 	// The number of raw bytes consumed from the file for the loaded content
 	bytes_read = actually_read - bom_offset;
 
 	// Split the raw bytes into FileLine's, keeping the raw byte content
+	// and the newline of each line
 	std::string cur;
-	for (auto c : raw)
-	{
-		if (c == '\n')
-		{
-			lines.push_back ({ cur });
-			cur.clear ();
-		}
-		else if (c != '\r')
-		{
-			cur += c;
-		}
-	}
+	split_lines (lines, raw, cur, bytes_read + bom_offset < total_size);
 
 	// Last partial line (no trailing newline)
 	lines.push_back ({ cur });
@@ -267,6 +302,36 @@ File::~File ()
 	{
 		CloseHandle (handle);
 	}
+}
+
+void File::detect_newline (const std::string &raw)
+{
+	// The beginning of the content the detection runs on
+	auto sample_size = min ((int) raw.size (), 1024);
+
+	// The counts of the newline kinds found; the scanning stops when the
+	// sample is exhausted or enough newlines are found
+	int crlf = 0;
+	int lf = 0;
+	int found = 0;
+
+	for (int i = 0; i < sample_size && found < 5; i++)
+	{
+		if (raw[i] == '\r' && i + 1 < sample_size && raw[i + 1] == '\n')
+		{
+			crlf++;
+			found++;
+			i++;
+		}
+		else if (raw[i] == '\n')
+		{
+			lf++;
+			found++;
+		}
+	}
+
+	// The most common kind wins, a tie defaults to the Windows CRLF
+	newline = crlf >= lf ? "\r\n" : "\n";
 }
 
 void File::set_tab_width (int tab_width)
@@ -363,18 +428,7 @@ void File::load_more ()
 	// The index of the first newly pushed line
 	auto new_start = (int) lines.size ();
 
-	for (auto c : raw)
-	{
-		if (c == '\n')
-		{
-			lines.push_back ({ cur });
-			cur.clear ();
-		}
-		else if (c != '\r')
-		{
-			cur += c;
-		}
-	}
+	split_lines (lines, raw, cur, bytes_read + bom_offset < total_size);
 
 	lines.push_back ({ cur });
 
@@ -394,6 +448,66 @@ void File::load_more ()
 		CloseHandle (handle);
 		handle = INVALID_HANDLE_VALUE;
 	}
+}
+
+void File::load_all ()
+{
+	while (!fully_loaded)
+	{
+		load_more ();
+	}
+}
+
+bool File::save ()
+{
+	// The whole content is needed for the reconstruction
+	load_all ();
+
+	// The content: the BOM of the source file (if any), then every line
+	// followed by its own newline, so the pre-existing lines keep the
+	// newline they had in the file
+	std::string content;
+
+	if (bom_offset > 0)
+	{
+		content += "\xEF\xBB\xBF";
+	}
+
+	for (auto &l : lines)
+	{
+		content += l.raw_data;
+		content += l.newline;
+	}
+
+	// The previous content is replaced with the new one
+	auto write_handle = CreateFileW (
+		path.c_str (),
+		GENERIC_WRITE,
+		FILE_SHARE_READ,
+		nullptr,
+		CREATE_ALWAYS,
+		FILE_ATTRIBUTE_NORMAL,
+		nullptr
+	);
+
+	if (write_handle == INVALID_HANDLE_VALUE)
+	{
+		return false;
+	}
+
+	DWORD written = 0;
+	auto ok = WriteFile (write_handle, content.data (), (DWORD) content.size (), &written, nullptr)
+		&& written == content.size ();
+
+	CloseHandle (write_handle);
+
+	if (ok)
+	{
+		// The file on disk now matches the loaded content
+		total_size = content.size ();
+	}
+
+	return ok;
 }
 
 }

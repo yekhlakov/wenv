@@ -160,8 +160,7 @@ void editor_exit (::Wenv::Display::Display *display, ::Wenv::Context *context)
 	}
 
 	// No changes or no editor to ask: the changes are dropped and the
-	// editor display is closed (or the application is closed when it is
-	// the only display left)
+	// editor display is closed
 	clear_undo (context);
 
 	if (display == nullptr || display->window == nullptr)
@@ -169,14 +168,7 @@ void editor_exit (::Wenv::Display::Display *display, ::Wenv::Context *context)
 		return;
 	}
 
-	if (!display->window->pop_display ())
-	{
-		DestroyWindow (display->window->hwnd);
-	}
-	else
-	{
-		display->window->invalidate_modified ();
-	}
+	display->window->close_current_display ();
 }
 
 void FileEditor::draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area)
@@ -537,6 +529,19 @@ bool FileEditor::handle_keydown (unsigned int key, int modifiers)
 	// The modifier flag of the control key (see Window::current_mods)
 	constexpr int ctrl = 1;
 
+	// The Escape key is owned by the editor: in the editing mode it is
+	// ignored so the unsaved changes cannot be lost, in the viewing mode
+	// the editor is closed (without saving)
+	if (key == VK_ESCAPE)
+	{
+		if (!*is_editing)
+		{
+			editor_exit (current_display, current_context);
+		}
+
+		return true;
+	}
+
 	if (*is_editing)
 	{
 		// The editing mode: the keys move the cursor in the raw coordinates
@@ -758,9 +763,21 @@ bool FileEditor::insert_typed_char (unsigned int key, int modifiers, int *cursor
 
 	// The cursor past the end of file: empty lines are appended so that the
 	// cursor line exists and is the last of them
-	while (*cursor_line >= (int) file->lines.size ())
+	if (*cursor_line >= (int) file->lines.size ())
 	{
-		file->lines.push_back ({});
+		// The line before the appended ones gets the separator; the cursor
+		// line is the new last line and has no newline yet
+		if (!file->lines.empty ())
+		{
+			file->lines.back ().newline = file->newline;
+		}
+
+		while (*cursor_line >= (int) file->lines.size ())
+		{
+			file->lines.push_back ({ {}, file->newline });
+		}
+
+		file->lines.back ().newline.clear ();
 	}
 
 	auto it = line_iterator (file, *cursor_line);
@@ -780,12 +797,17 @@ bool FileEditor::insert_typed_char (unsigned int key, int modifiers, int *cursor
 		if (ch == L'\r' || ch == L'\n')
 		{
 			// The enter key produces a newline: the line is split at the
-			// cursor, the part after the cursor becomes the new line
+			// cursor, the part after the cursor becomes the new line. The
+			// original newline of the line stays with the new line, the
+			// inserted separator is the actual newline of the file
 			auto split = (size_t) min (*cursor_pos, (int) it->raw_data.size ());
 			auto tail = it->raw_data.substr (split);
+			auto tail_newline = it->newline;
 
 			it->raw_data.resize (split);
-			it = file->lines.insert (std::next (it), { tail });
+			it->newline = file->newline;
+
+			it = file->lines.insert (std::next (it), { tail, tail_newline });
 
 			(*cursor_line)++;
 			*cursor_pos = 0;
@@ -846,7 +868,10 @@ bool FileEditor::backspace_at_cursor (int *cursor_line, int *cursor_pos)
 		auto prev = std::prev (it);
 		auto prev_length = (int) prev->raw_data.size ();
 
+		// The newline of the merged line is the one of the joined line; the
+		// removed separator of the previous line is restored by the undo
 		prev->raw_data += it->raw_data;
+		prev->newline = it->newline;
 		file->lines.erase (it);
 
 		// The merged line may have become the longest one
@@ -932,7 +957,9 @@ bool FileEditor::delete_at_cursor (int *cursor_line, int *cursor_pos)
 	{
 		auto next = std::next (it);
 
+		// The newline of the merged line is the one of the joined line
 		it->raw_data += next->raw_data;
+		it->newline = next->newline;
 		file->lines.erase (next);
 
 		// The merged line may have become the longest one
@@ -961,6 +988,9 @@ bool FileEditor::delete_at_cursor (int *cursor_line, int *cursor_pos)
 		auto prev = std::prev (it);
 		auto prev_length = (int) prev->raw_data.size ();
 
+		// The trailing newline of the file is the newline of the line
+		// before the trailing empty line
+		prev->newline.clear ();
 		file->lines.erase (it);
 
 		*cursor_line = (int) file->lines.size () - 1;
@@ -1031,27 +1061,32 @@ void FileEditor::apply_undo_insert (const UndoOperation &op, int *cursor_line, i
 	// Empty lines are appended so that the place of the insert exists
 	while (op.line >= (int) file->lines.size ())
 	{
-		file->lines.push_back ({});
+		file->lines.push_back ({ {}, file->newline });
 	}
 
 	auto it = line_iterator (file, op.line);
 	auto place = (size_t) max (0, min (op.pos, (int) it->raw_data.size ()));
 
-	// The tail of the line goes after the inserted text
+	// The tail of the line goes after the inserted text, keeping the
+	// original newline of the line
 	auto tail = it->raw_data.substr (place);
+	auto tail_newline = it->newline;
 	it->raw_data.resize (place);
 
 	auto line_index = op.line;
 	auto end_line = op.line;
 	auto end_pos = 0;
 
-	// The text is inserted chunk by chunk, the newlines in it split the line
+	// The text is inserted chunk by chunk, the newlines in it split the
+	// line; the separators created by the insertion are the actual newline
+	// of the file, the last chunk line keeps the newline of the tail
 	for (size_t chunk_start = 0; ; )
 	{
 		auto nl = op.text.find ('\n', chunk_start);
 		auto chunk_end = nl == std::string::npos ? op.text.size () : nl;
 
 		it->raw_data += op.text.substr (chunk_start, chunk_end - chunk_start);
+		it->newline = nl == std::string::npos ? tail_newline : file->newline;
 
 		// The edited line may have become the longest one
 		file->measure (*it);
@@ -1104,9 +1139,11 @@ void FileEditor::apply_undo_remove (const UndoOperation &op, int *cursor_line, i
 		auto end_pos = max (0, min (op.end_pos, (int) end_it->raw_data.size ()));
 
 		// The head of the first line and the tail of the last line of the
-		// range merge together, the lines between them disappear
+		// range merge together, the lines between them disappear; the
+		// merged line keeps the newline of the last line of the range
 		it->raw_data.resize (start_pos);
 		it->raw_data += end_it->raw_data.substr (end_pos);
+		it->newline = end_it->newline;
 
 		file->lines.erase (std::next (it), std::next (end_it));
 
@@ -1121,7 +1158,15 @@ void FileEditor::apply_undo_remove (const UndoOperation &op, int *cursor_line, i
 
 void FileEditor::save_changes ()
 {
-	// The actual saving is not implemented yet
+	auto file = get_file ();
+
+	if (file != nullptr)
+	{
+		// The lines are written with their own newlines, so the lines
+		// created during the editing are saved with the actual newline of
+		// the file while the pre-existing ones keep theirs
+		file->save ();
+	}
 }
 
 void FileEditor::show_guard_modal (const std::string &action)

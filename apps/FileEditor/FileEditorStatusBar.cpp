@@ -62,6 +62,9 @@ void FileEditorStatusBar::redraw (const std::string &path)
 		auto line_count = file->get_line_count ();
 		auto loaded_count = (int) file->lines.size ();
 
+		// The newline of the file as determined on opening
+		auto newline_part = file->newline == "\n" ? L"  LF" : L"  CRLF";
+
 		// The total line count part: the real count of a fully loaded file,
 		// a question mark otherwise
 		auto count_part = line_count != UNKNOWN_LINE_COUNT
@@ -88,7 +91,8 @@ void FileEditorStatusBar::redraw (const std::string &path)
 				{ count_part, false },
 				{ L"  Col ", false },
 				{ std::format (L"{}", display_pos + 1), past_line_end },
-				{ std::format (L"  T{}", tab_width), false }
+				{ std::format (L"  T{}", tab_width), false },
+				{ newline_part, false }
 			};
 		}
 		else
@@ -102,7 +106,8 @@ void FileEditorStatusBar::redraw (const std::string &path)
 				{ std::format (L"{}", line_num), false },
 				{ count_part, false },
 				{ std::format (L"  Col {}", *left + 1), false },
-				{ std::format (L"  T{}", tab_width), false }
+				{ std::format (L"  T{}", tab_width), false },
+				{ newline_part, false }
 			};
 		}
 	}

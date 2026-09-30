@@ -13,6 +13,11 @@ namespace Wenv::Apps
 struct FileLine
 {
 	std::string raw_data;
+
+	// The newline that follows the line content in the file ("\\r\\n" or
+	// "\\n"); empty for the last line when the file does not end with a
+	// newline
+	std::string newline;
 };
 
 // The total number of lines is not known until the entire file is loaded.
@@ -72,6 +77,10 @@ public:
 	std::list<FileLine> lines;
 	std::size_t longest_expanded = 0;
 
+	// The newline of the file as determined on opening: the most common of
+	// the first few newlines of the content, the Windows CRLF by default
+	std::string newline = "\r\n";
+
 	File (const std::wstring &path);
 	~File ();
 
@@ -95,7 +104,19 @@ public:
 	// load the next chunk. Safe to call every redraw.
 	void ensure_loaded (int top_line, int visible_height);
 
+	// Save the current content of the file: the remaining content is
+	// loaded first, then the lines are written with their own newlines,
+	// the BOM of the source file (if any) is preserved. Returns true on
+	// success
+	bool save ();
+
 private:
+	// Determine the newline of the file from the beginning of its content
+	void detect_newline (const std::string &raw);
+
+	// Load the remaining content of the file; saving needs the whole of it
+	void load_all ();
+
 	void load_more ();
 };
 

@@ -43,8 +43,8 @@ void Window::handle_keyup (WPARAM wParam, LPARAM lParam)
 // Dispatch a key press or key release to the apps of the display: while a modal
 // is visible every event goes to the modal apps only, otherwise the event is
 // forwarded to the apps that want all keypresses (e.g. the func menu) and then
-// to the focused app (if any). Escape pops the display, but only when pressed
-// (not on release)
+// to the focused app (if any). The Escape key closes the display when no app
+// has consumed it, so the apps own the key
 void Window::dispatch_key_event (WPARAM wParam, int mods, bool pressed)
 {
 	if (current_display->current_modal != nullptr)
@@ -58,16 +58,6 @@ void Window::dispatch_key_event (WPARAM wParam, int mods, bool pressed)
 			forward_key_to_apps (current_display->current_modal->apps, ctx, wParam, mods, pressed);
 		}
 		invalidate_modified ();
-		return;
-	}
-
-	if (pressed && wParam == VK_ESCAPE && display_stack.size () > 1)
-	{
-		pop_display ();
-
-		// The restored display has been fully regenerated - repaint it
-		invalidate_modified ();
-
 		return;
 	}
 
@@ -88,11 +78,17 @@ void Window::dispatch_key_event (WPARAM wParam, int mods, bool pressed)
 	}
 
 	auto focused_app = focused_context->get<::Wenv::Apps::App> ("focused-app");
+	auto consumed = focused_app != nullptr
+		&& forward_key_to_apps ({ focused_app }, focused_context, wParam, mods, pressed);
 
-	if (focused_app != nullptr)
+	// The Escape closes the current display only when no app has consumed
+	// it, and only when pressed (not on release)
+	if (!consumed && pressed && wParam == VK_ESCAPE && display_stack.size () > 1)
 	{
-		forward_key_to_apps ({ focused_app }, focused_context, wParam, mods, pressed);
+		close_current_display ();
+		return;
 	}
+
 	invalidate_modified ();
 }
 

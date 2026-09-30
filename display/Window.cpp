@@ -222,6 +222,18 @@ bool Window::pop_display ()
     return true;
 }
 
+void Window::close_current_display ()
+{
+    if (!pop_display ())
+    {
+        DestroyWindow (hwnd);
+    }
+    else
+    {
+        invalidate_modified ();
+    }
+}
+
 Display *Window::get_display (const std::string &n)
 {
     if (displays.find (n) == displays.end ()) {
