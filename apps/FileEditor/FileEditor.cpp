@@ -26,6 +26,24 @@ void toggle_editing_mode (::Wenv::Context *context)
 	*is_editing = !*is_editing;
 }
 
+void clear_undo (::Wenv::Context *context)
+{
+	if (context == nullptr)
+	{
+		return;
+	}
+
+	// The focused app is stored as its base type, the editor is recognized
+	// by the dynamic type
+	auto app = context->get<App> ("focused-app");
+	auto editor = dynamic_cast<FileEditor *> (app);
+
+	if (editor != nullptr)
+	{
+		editor->clear_undo ();
+	}
+}
+
 void FileEditor::draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area)
 {
 	App::draw (display, path, client_area);
@@ -469,6 +487,11 @@ bool FileEditor::handle_keydown (unsigned int key, int modifiers)
 			// Delete removes the character at the cursor
 			handled = delete_at_cursor (cursor_line, cursor_pos);
 		}
+		else if (key == 'Z' && (modifiers & ctrl))
+		{
+			// Ctrl+Z applies and drops the last undo operation
+			handled = undo_last (cursor_line, cursor_pos);
+		}
 		else
 		{
 			// A regular keypress: convert the key to its unicode character
@@ -580,6 +603,21 @@ bool FileEditor::insert_typed_char (unsigned int key, int modifiers, int *cursor
 		return false;
 	}
 
+	// The beginning of the inserted text in the unmodified file: the old end
+	// of the line when the line is padded, the old end of the file when the
+	// lines are appended
+	auto old_size = (int) file->lines.size ();
+	auto start_line = 0;
+	auto start_pos = 0;
+
+	if (old_size > 0)
+	{
+		start_line = min (*cursor_line, old_size - 1);
+		start_pos = *cursor_line < old_size
+			? min (*cursor_pos, file_line_length (file, *cursor_line))
+			: file_line_length (file, old_size - 1);
+	}
+
 	// The cursor past the end of file: empty lines are appended so that the
 	// cursor line exists and is the last of them
 	while (*cursor_line >= (int) file->lines.size ())
@@ -629,6 +667,17 @@ bool FileEditor::insert_typed_char (unsigned int key, int modifiers, int *cursor
 		file->measure (*it);
 	}
 
+	// The undo operation removes everything the input has added: the line
+	// padding, the appended empty lines and the characters themselves
+	undo_stack.push_back
+	({
+		.type = UndoType::remove,
+		.start_line = start_line,
+		.start_pos = start_pos,
+		.end_line = *cursor_line,
+		.end_pos = *cursor_pos
+	});
+
 	return true;
 }
 
@@ -668,6 +717,15 @@ bool FileEditor::backspace_at_cursor (int *cursor_line, int *cursor_pos)
 		(*cursor_line)--;
 		*cursor_pos = prev_length;
 
+		// The undo operation inserts the removed newline back
+		undo_stack.push_back
+		({
+			.type = UndoType::insert,
+			.line = *cursor_line,
+			.pos = prev_length,
+			.text = "\n"
+		});
+
 		return true;
 	}
 
@@ -680,8 +738,18 @@ bool FileEditor::backspace_at_cursor (int *cursor_line, int *cursor_pos)
 		start--;
 	}
 
+	auto removed = it->raw_data.substr (start, pos - start);
 	it->raw_data.erase (start, pos - start);
 	*cursor_pos = start;
+
+	// The undo operation inserts the removed character back
+	undo_stack.push_back
+	({
+		.type = UndoType::insert,
+		.line = *cursor_line,
+		.pos = start,
+		.text = removed
+	});
 
 	return true;
 }
@@ -702,8 +770,20 @@ bool FileEditor::delete_at_cursor (int *cursor_line, int *cursor_pos)
 	// The character at the cursor: its utf-8 byte sequence is removed
 	if (pos < (int) it->raw_data.size ())
 	{
-		it->raw_data.erase (pos, utf8_char_length (it->raw_data[pos]));
+		auto length = utf8_char_length (it->raw_data[pos]);
+		auto removed = it->raw_data.substr (pos, length);
+
+		it->raw_data.erase (pos, length);
 		*cursor_pos = pos;
+
+		// The undo operation inserts the removed character back
+		undo_stack.push_back
+		({
+			.type = UndoType::insert,
+			.line = *cursor_line,
+			.pos = pos,
+			.text = removed
+		});
 
 		return true;
 	}
@@ -723,6 +803,15 @@ bool FileEditor::delete_at_cursor (int *cursor_line, int *cursor_pos)
 		// The cursor stays at the junction of the concatenated lines
 		*cursor_pos = pos;
 
+		// The undo operation inserts the removed newline back
+		undo_stack.push_back
+		({
+			.type = UndoType::insert,
+			.line = *cursor_line,
+			.pos = pos,
+			.text = "\n"
+		});
+
 		return true;
 	}
 
@@ -739,10 +828,141 @@ bool FileEditor::delete_at_cursor (int *cursor_line, int *cursor_pos)
 		*cursor_line = (int) file->lines.size () - 1;
 		*cursor_pos = prev_length;
 
+		// The undo operation inserts the removed newline back
+		undo_stack.push_back
+		({
+			.type = UndoType::insert,
+			.line = *cursor_line,
+			.pos = prev_length,
+			.text = "\n"
+		});
+
 		return true;
 	}
 
 	return false;
+}
+
+bool FileEditor::undo_last (int *cursor_line, int *cursor_pos)
+{
+	if (undo_stack.empty ())
+	{
+		return false;
+	}
+
+	auto op = undo_stack.back ();
+	undo_stack.pop_back ();
+
+	if (op.type == UndoType::insert)
+	{
+		apply_undo_insert (op, cursor_line, cursor_pos);
+	}
+	else
+	{
+		apply_undo_remove (op, cursor_line, cursor_pos);
+	}
+
+	return true;
+}
+
+void FileEditor::apply_undo_insert (const UndoOperation &op, int *cursor_line, int *cursor_pos)
+{
+	auto file = get_file ();
+
+	if (file == nullptr)
+	{
+		return;
+	}
+
+	// Empty lines are appended so that the place of the insert exists
+	while (op.line >= (int) file->lines.size ())
+	{
+		file->lines.push_back ({});
+	}
+
+	auto it = line_iterator (file, op.line);
+	auto place = (size_t) max (0, min (op.pos, (int) it->raw_data.size ()));
+
+	// The tail of the line goes after the inserted text
+	auto tail = it->raw_data.substr (place);
+	it->raw_data.resize (place);
+
+	auto line_index = op.line;
+	auto end_line = op.line;
+	auto end_pos = 0;
+
+	// The text is inserted chunk by chunk, the newlines in it split the line
+	for (size_t chunk_start = 0; ; )
+	{
+		auto nl = op.text.find ('\n', chunk_start);
+		auto chunk_end = nl == std::string::npos ? op.text.size () : nl;
+
+		it->raw_data += op.text.substr (chunk_start, chunk_end - chunk_start);
+
+		// The edited line may have become the longest one
+		file->measure (*it);
+
+		end_line = line_index;
+		end_pos = (int) it->raw_data.size ();
+
+		if (nl == std::string::npos)
+		{
+			break;
+		}
+
+		it = file->lines.insert (std::next (it), {});
+		line_index++;
+		chunk_start = nl + 1;
+	}
+
+	it->raw_data += tail;
+	file->measure (*it);
+
+	// The cursor is placed just past the inserted text
+	*cursor_line = end_line;
+	*cursor_pos = end_pos;
+}
+
+void FileEditor::apply_undo_remove (const UndoOperation &op, int *cursor_line, int *cursor_pos)
+{
+	auto file = get_file ();
+
+	if (file == nullptr || file->lines.empty ())
+	{
+		return;
+	}
+
+	// The range is clamped to the loaded content
+	auto size = (int) file->lines.size ();
+	auto start_line = max (0, min (op.start_line, size - 1));
+	auto end_line = max (start_line, min (op.end_line, size - 1));
+
+	auto it = line_iterator (file, start_line);
+	auto start_pos = max (0, min (op.start_pos, (int) it->raw_data.size ()));
+
+	if (start_line == end_line)
+	{
+		it->raw_data.erase (start_pos, max (0, op.end_pos - start_pos));
+	}
+	else
+	{
+		auto end_it = line_iterator (file, end_line);
+		auto end_pos = max (0, min (op.end_pos, (int) end_it->raw_data.size ()));
+
+		// The head of the first line and the tail of the last line of the
+		// range merge together, the lines between them disappear
+		it->raw_data.resize (start_pos);
+		it->raw_data += end_it->raw_data.substr (end_pos);
+
+		file->lines.erase (std::next (it), std::next (end_it));
+
+		// The merged line may have become the longest one
+		file->measure (*it);
+	}
+
+	// The cursor is placed at the beginning of the removed range
+	*cursor_line = start_line;
+	*cursor_pos = start_pos;
 }
 
 void FileEditor::redraw_all (const std::string &path)

@@ -11,6 +11,33 @@ class File;
 // Toggle the editing mode flag of the file editor kept in the given context
 void toggle_editing_mode (::Wenv::Context *context);
 
+// Drop the undo stack of the file editor kept behind the given context
+void clear_undo (::Wenv::Context *context);
+
+// The kind of the undo operation: removing a text range (reverting an
+// insertion) or inserting text back (reverting a removal)
+enum class UndoType { remove, insert };
+
+// A single undo operation: the action that reverts one editing input
+struct UndoOperation
+{
+	UndoType type = UndoType::remove;
+
+	// The remove operation: the range of lines and symbols to remove, from
+	// (start_line, start_pos) to (end_line, end_pos); the end position is
+	// just past the removed text
+	int start_line = 0;
+	int start_pos = 0;
+	int end_line = 0;
+	int end_pos = 0;
+
+	// The insert operation: the place in the file and the text to insert
+	// back; the text may span several lines
+	int line = 0;
+	int pos = 0;
+	std::string text;
+};
+
 class FileEditor : public App
 {
 	// The per-parameter accessors to the current context. They keep the
@@ -50,8 +77,23 @@ class FileEditor : public App
 	// there is nothing to remove
 	bool delete_at_cursor (int *cursor_line, int *cursor_pos);
 
+	// The undo stack of the current editing session: the operations that
+	// revert the inputs made so far, the most recent last
+	std::vector<UndoOperation> undo_stack;
+
+	// Apply the last undo operation and drop it; returns false when the
+	// stack is empty
+	bool undo_last (int *cursor_line, int *cursor_pos);
+
+	// The apply functions of the two undo operation kinds
+	void apply_undo_insert (const UndoOperation &op, int *cursor_line, int *cursor_pos);
+	void apply_undo_remove (const UndoOperation &op, int *cursor_line, int *cursor_pos);
+
 public:
 	FileEditor (const std::wstring &n) : App { n } {}
+
+	// Drop the undo operations of the editing session
+	void clear_undo () { undo_stack.clear (); }
 
 	virtual void draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area) override;
 	virtual void redraw (const std::string &path) override;

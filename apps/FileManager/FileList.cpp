@@ -8,6 +8,7 @@
 #include "../../display/Palette.h"
 #include "../../display/Window.h"
 #include "FileList.h"
+#include "../FileEditor/FileEditor.h"
 #include "../../Context.h"
 
 #pragma comment(lib, "shlwapi.lib")
@@ -146,6 +147,10 @@ void show_selected_file (::Wenv::Display::Display *display, ::Wenv::Context *c, 
 	// The editor keeps the shown file together with the requested edit state
 	// in its own context, which it reads when it and its status bar redraw
 	auto ctx = display->window->get_display ("file-editor")->get_context ("file-editor");
+
+	// Opening a file starts a new editing session: the undo operations of
+	// the previous one do not apply
+	clear_undo (ctx);
 
 	ctx->set ("edit-target", new std::wstring { selected.cFileName });
 	ctx->set ("edit-pwd", new std::wstring { *pwd });

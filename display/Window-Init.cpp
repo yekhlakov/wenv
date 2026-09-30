@@ -68,10 +68,12 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_default_commands ()
 }
 
 // Build the default func menu command list of the file editor: in addition to
-// the common F10 "Exit" it has the F3 "TabSz" command, which cycles the tab
-// width of the editor, and the F6 "Edt/Vw" command, which toggles the editing
-// mode of the editor. The func menu redraws the apps of the context after a
-// command has run, so the mode change shows up in the editor and its status bar
+// the F10 "Exit" command, which closes the editor display and drops its undo
+// stack, it has the F3 "TabSz" command, which cycles the tab width of the
+// editor, and the F6 "Edt/Vw" command, which toggles the editing mode of the
+// editor (also dropping its undo stack). The func menu redraws the apps of
+// the context after a command has run, so the mode change shows up in the
+// editor and its status bar
 std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_editor_commands ()
 {
 	auto commands = make_func_menu_default_commands ();
@@ -91,6 +93,28 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_editor_commands
 		[] (::Wenv::Display::Display *, ::Wenv::Context *context)
 		{
 			::Wenv::Apps::toggle_editing_mode (context);
+
+			// The undo stack does not survive the mode switch
+			::Wenv::Apps::clear_undo (context);
+		}
+	};
+
+	(*commands)[9] = {
+		L"Exit",
+
+		[] (::Wenv::Display::Display *display, ::Wenv::Context *context)
+		{
+			// Exiting the editor drops its undo stack
+			::Wenv::Apps::clear_undo (context);
+
+			if (!display->window->pop_display ())
+			{
+				DestroyWindow (display->window->hwnd);
+			}
+			else
+			{
+				display->window->invalidate_modified ();
+			}
 		}
 	};
 
