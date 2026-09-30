@@ -135,6 +135,17 @@ void FileEditorStatusBar::redraw (const std::string &path)
 
 	current_display->print_line (area.x + 1, area.y, full_path);
 
+	// The unsaved changes marker follows the file name when the editor
+	// keeps undo operations for the file; the editor propagates the state
+	// of its undo stack through this context flag
+	auto pending = current_context->get<bool> ("pending-changes", [] () { return new bool { false }; });
+
+	if (*pending)
+	{
+		current_display->with_color (::Wenv::Display::Palette::Active_element_color, true);
+		current_display->print_line (area.x + 1 + (int) full_path.size (), area.y, L"*");
+	}
+
 	// The parts are drawn sequentially from the right edge of the bar
 	auto total_width = 0;
 

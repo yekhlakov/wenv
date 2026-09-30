@@ -67,13 +67,12 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_default_commands ()
 	return commands;
 }
 
-// Build the default func menu command list of the file editor: in addition to
-// the F10 "Exit" command, which closes the editor display and drops its undo
-// stack, it has the F3 "TabSz" command, which cycles the tab width of the
-// editor, and the F6 "Edt/Vw" command, which toggles the editing mode of the
-// editor (also dropping its undo stack). The func menu redraws the apps of
-// the context after a command has run, so the mode change shows up in the
-// editor and its status bar
+// Build the default func menu command list of the file editor: the F10 "Exit"
+// command closes the editor display (asking what to do with the unsaved
+// changes first, as does the F6 "Edt/Vw" command when it leaves the editing
+// mode), the F3 "TabSz" command cycles the tab width of the editor. The func
+// menu redraws the apps of the context after a command has run, so the mode
+// change shows up in the editor and its status bar
 std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_editor_commands ()
 {
 	auto commands = make_func_menu_default_commands ();
@@ -90,12 +89,9 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_editor_commands
 	(*commands)[5] = {
 		L"Edt/Vw",
 
-		[] (::Wenv::Display::Display *, ::Wenv::Context *context)
+		[] (::Wenv::Display::Display *display, ::Wenv::Context *context)
 		{
-			::Wenv::Apps::toggle_editing_mode (context);
-
-			// The undo stack does not survive the mode switch
-			::Wenv::Apps::clear_undo (context);
+			::Wenv::Apps::editor_toggle_editing (display, context);
 		}
 	};
 
@@ -104,17 +100,7 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_editor_commands
 
 		[] (::Wenv::Display::Display *display, ::Wenv::Context *context)
 		{
-			// Exiting the editor drops its undo stack
-			::Wenv::Apps::clear_undo (context);
-
-			if (!display->window->pop_display ())
-			{
-				DestroyWindow (display->window->hwnd);
-			}
-			else
-			{
-				display->window->invalidate_modified ();
-			}
+			::Wenv::Apps::editor_exit (display, context);
 		}
 	};
 
@@ -321,6 +307,16 @@ void Window::initialize ()
 	grid->context->set ("func_menu.default", make_func_menu_file_editor_commands ());
 
         d->grid = grid;
+
+        // The guard modal of the editor: the apps attached to its grid blocks
+        // draw the modal title, the modal text and the modal buttons from the
+        // shared "modal" context, so the modal itself carries no content
+        d->add_context (new ::Wenv::Context { "modal" });
+        auto modal_title = d->add_app (new ::Wenv::Apps::ModalTitle { L"modal-title" });
+        auto modal_text = d->add_app (new ::Wenv::Apps::ModalText { L"modal-text" });
+        auto modal_buttons = d->add_app (new ::Wenv::Apps::ModalButtons { L"modal-buttons" });
+
+        d->add_modal ("guard", new ::Wenv::Display::Modal { modal_title, modal_text, modal_buttons });
 
         add_display ("file-editor", d);
     }

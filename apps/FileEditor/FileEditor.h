@@ -14,6 +14,14 @@ void toggle_editing_mode (::Wenv::Context *context);
 // Drop the undo stack of the file editor kept behind the given context
 void clear_undo (::Wenv::Context *context);
 
+// The F6 command of the editor: toggle the editing mode, asking what to do
+// with the unsaved changes when leaving the editing mode
+void editor_toggle_editing (::Wenv::Display::Display *display, ::Wenv::Context *context);
+
+// The F10 command of the editor: close the editor, asking what to do with
+// the unsaved changes when there are any
+void editor_exit (::Wenv::Display::Display *display, ::Wenv::Context *context);
+
 // The kind of the undo operation: removing a text range (reverting an
 // insertion) or inserting text back (reverting a removal)
 enum class UndoType { remove, insert };
@@ -51,6 +59,13 @@ class FileEditor : public App
 	std::string * get_focused_path ();
 	std::vector<App *> * get_app_group ();
 	bool * get_is_editing ();
+
+	// The unsaved changes flag shared with the status bar: true while the
+	// undo stack of the editing session is not empty
+	bool * get_pending_changes ();
+
+	// Update the unsaved changes flag according to the undo stack state
+	void update_pending_changes ();
 
 	// The full path of the currently edited file; empty when no file is
 	// being edited (no target or working directory set)
@@ -93,7 +108,19 @@ public:
 	FileEditor (const std::wstring &n) : App { n } {}
 
 	// Drop the undo operations of the editing session
-	void clear_undo () { undo_stack.clear (); }
+	void clear_undo () { undo_stack.clear (); update_pending_changes (); }
+
+	// Discard all the changes of the session by applying the whole undo
+	// stack, emptying it in the process
+	void discard_changes ();
+
+	// The placeholder of saving the changes: the actual saving is not
+	// implemented yet
+	void save_changes ();
+
+	// Show the unsaved changes guard modal that proceeds with the given
+	// action ("exit" or "view") when the changes are saved or discarded
+	void show_guard_modal (const std::string &action);
 
 	virtual void draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area) override;
 	virtual void redraw (const std::string &path) override;

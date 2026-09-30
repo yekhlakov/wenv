@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include "../../display/Display.h"
+#include "../../display/Window.h"
 #include "../../display/Palette.h"
 #include "../../maxy/strings.h"
 #include "../../Context.h"
@@ -41,6 +42,140 @@ void clear_undo (::Wenv::Context *context)
 	if (editor != nullptr)
 	{
 		editor->clear_undo ();
+	}
+}
+
+// The file editor app of the given display, null when it is absent
+static FileEditor * get_editor_app (::Wenv::Display::Display *display)
+{
+	auto ctx = display != nullptr ? display->get_context ("file-editor") : nullptr;
+
+	return ctx == nullptr ? nullptr : dynamic_cast<FileEditor *> (ctx->get<App> ("focused-app"));
+}
+
+// Proceed with the action that requested the guard modal: exit the editor
+// or switch it to the viewing mode; the changes are dropped either way
+static void guard_proceed (::Wenv::Display::Display *display)
+{
+	auto ctx = display != nullptr ? display->get_context ("file-editor") : nullptr;
+
+	if (ctx == nullptr)
+	{
+		return;
+	}
+
+	// The changes do not survive the action
+	clear_undo (ctx);
+
+	// The action remembered by the guard modal
+	auto action = ctx->get<std::string> ("guard-action");
+
+	if (action == nullptr)
+	{
+		return;
+	}
+
+	if (*action == "exit")
+	{
+		editor_exit (display, ctx);
+	}
+	else if (*action == "view")
+	{
+		toggle_editing_mode (ctx);
+	}
+}
+
+// The "Save the changes" button: the (yet unimplemented) saving is followed
+// by the action that requested the guard
+static void guard_save (::Wenv::Display::Display *display)
+{
+	auto editor = get_editor_app (display);
+
+	if (editor != nullptr)
+	{
+		editor->save_changes ();
+	}
+
+	guard_proceed (display);
+}
+
+// The "Discard the changes" button: the changes are reverted by applying
+// the whole undo stack and the action that requested the guard proceeds
+static void guard_discard (::Wenv::Display::Display *display)
+{
+	auto editor = get_editor_app (display);
+
+	if (editor != nullptr)
+	{
+		editor->discard_changes ();
+	}
+
+	guard_proceed (display);
+}
+
+void editor_toggle_editing (::Wenv::Display::Display *display, ::Wenv::Context *context)
+{
+	if (context == nullptr)
+	{
+		return;
+	}
+
+	auto is_editing = context->get<bool> ("is_editing", [] () { return new bool { false }; });
+	auto pending = context->get<bool> ("pending-changes", [] () { return new bool { false }; });
+
+	// Leaving the editing mode with unsaved changes asks what to do with
+	// them first
+	if (*is_editing && *pending)
+	{
+		auto editor = get_editor_app (display);
+
+		if (editor != nullptr)
+		{
+			editor->show_guard_modal ("view");
+			return;
+		}
+	}
+
+	toggle_editing_mode (context);
+	clear_undo (context);
+}
+
+void editor_exit (::Wenv::Display::Display *display, ::Wenv::Context *context)
+{
+	auto pending = context != nullptr
+		? context->get<bool> ("pending-changes", [] () { return new bool { false }; })
+		: nullptr;
+
+	// Closing the editor with unsaved changes asks what to do with them
+	// first
+	if (pending != nullptr && *pending)
+	{
+		auto editor = get_editor_app (display);
+
+		if (editor != nullptr)
+		{
+			editor->show_guard_modal ("exit");
+			return;
+		}
+	}
+
+	// No changes or no editor to ask: the changes are dropped and the
+	// editor display is closed (or the application is closed when it is
+	// the only display left)
+	clear_undo (context);
+
+	if (display == nullptr || display->window == nullptr)
+	{
+		return;
+	}
+
+	if (!display->window->pop_display ())
+	{
+		DestroyWindow (display->window->hwnd);
+	}
+	else
+	{
+		display->window->invalidate_modified ();
 	}
 }
 
@@ -504,6 +639,10 @@ bool FileEditor::handle_keydown (unsigned int key, int modifiers)
 			return false;
 		}
 
+		// The editing keys may have changed the undo stack, which shows up
+		// in the unsaved changes flag of the context
+		update_pending_changes ();
+
 		// The kept display column is converted back to the logical position
 		// in the line the cursor has arrived to
 		if (vertical)
@@ -864,6 +1003,22 @@ bool FileEditor::undo_last (int *cursor_line, int *cursor_pos)
 	return true;
 }
 
+void FileEditor::discard_changes ()
+{
+	// The undo operations move the cursor as they are applied, which must
+	// not affect the actual cursor of the session
+	int unused_line = 0;
+	int unused_pos = 0;
+
+	// The operations are applied from the most recent one down to the first
+	// one, which unwinds the content to its original state
+	while (undo_last (&unused_line, &unused_pos))
+	{
+	}
+
+	update_pending_changes ();
+}
+
 void FileEditor::apply_undo_insert (const UndoOperation &op, int *cursor_line, int *cursor_pos)
 {
 	auto file = get_file ();
@@ -962,6 +1117,40 @@ void FileEditor::apply_undo_remove (const UndoOperation &op, int *cursor_line, i
 	// The cursor is placed at the beginning of the removed range
 	*cursor_line = start_line;
 	*cursor_pos = start_pos;
+}
+
+void FileEditor::save_changes ()
+{
+	// The actual saving is not implemented yet
+}
+
+void FileEditor::show_guard_modal (const std::string &action)
+{
+	if (current_display == nullptr || current_context == nullptr)
+	{
+		return;
+	}
+
+	// The action to proceed with when the changes are saved or discarded
+	current_context->set ("guard-action", new std::string { action });
+
+	std::vector<::Wenv::Display::ModalButton> buttons =
+	{
+		{ L"Save the changes", guard_save },
+		{ L"Discard the changes", guard_discard },
+		{ L"Cancel", nullptr }
+	};
+
+	current_display->show_modal
+	(
+		"guard",
+		L"Warning",
+		L"There are unsaved changes, what do you want to do?",
+		buttons,
+		::Wenv::Display::Palette::Warning_element_color,
+		::Wenv::Display::Palette::Warning_element_color,
+		::Wenv::Display::Palette::Warning_element_color
+	);
 }
 
 void FileEditor::redraw_all (const std::string &path)
@@ -1067,6 +1256,24 @@ bool * FileEditor::get_is_editing ()
 	// Default: a file that has just been opened is viewed, not edited. The
 	// state is set from outside (the file manager or the F6 command)
 	return current_context->get<bool> ("is_editing", [] () { return new bool { false }; });
+}
+
+bool * FileEditor::get_pending_changes ()
+{
+	// Default: a freshly opened file has no unsaved changes. The flag is
+	// shared with the status bar, which shows the unsaved changes marker
+	// by it, so the stack itself stays hidden inside the editor
+	return current_context->get<bool> ("pending-changes", [] () { return new bool { false }; });
+}
+
+void FileEditor::update_pending_changes ()
+{
+	if (current_context == nullptr)
+	{
+		return;
+	}
+
+	*get_pending_changes () = !undo_stack.empty ();
 }
 
 int * FileEditor::get_file_cursor_line (const std::wstring &full_path)
