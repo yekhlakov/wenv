@@ -40,22 +40,12 @@ void FileEditor::draw (::Wenv::Display::Display &display, const std::string &pat
 
 void FileEditor::redraw (const std::string &path)
 {
-	auto target = get_edit_target ();
-	auto pwd = get_edit_pwd ();
+	auto full_path = get_full_path ();
 
-	if (target == nullptr || target->empty () || pwd == nullptr || pwd->empty ())
+	if (full_path.empty ())
 	{
 		return;
 	}
-
-	auto full_path = *pwd;
-
-	if (full_path.back () != L'\\' && full_path.back () != L'/')
-	{
-		full_path += L"\\";
-	}
-
-	full_path += *target;
 
 	auto file = get_file ();
 	auto viewed_path = get_viewed_path ();
@@ -327,7 +317,47 @@ void FileEditor::redraw (const std::string &path)
 
 bool FileEditor::handle_click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers)
 {
-	return false;
+	if (current_context == nullptr)
+	{
+		return false;
+	}
+
+	// The cursor is only moved in the editing mode
+	if (!*get_is_editing ())
+	{
+		return false;
+	}
+
+	auto full_path = get_full_path ();
+
+	if (full_path.empty ())
+	{
+		return false;
+	}
+
+	// The click lands on the visible portion of the content: the row and
+	// the column of the click within it. A click outside the content bounds
+	// is fine: the cursor positions itself past the content the same way
+	// the keyboard navigation does
+	auto top = get_file_top_line (full_path);
+	auto left = get_file_left_column (full_path);
+	auto tab_width = *get_tab_width (current_display->get_persistent_context ());
+
+	auto line = *top + position.y;
+	auto column = *left + position.x;
+
+	auto cursor_line = get_file_cursor_line (full_path);
+	auto cursor_pos = get_file_cursor_pos (full_path);
+
+	*cursor_line = line;
+	*cursor_pos = file_line_raw_pos (get_file (), line, column, tab_width);
+
+	// The redraw updates the cursor position of the display and marks the
+	// characters modified, so the cursor is actually repainted at the new
+	// place (it is drawn within the invalidated region only)
+	redraw_all (*get_focused_path ());
+
+	return true;
 }
 
 bool FileEditor::handle_keydown (unsigned int key, int modifiers)
@@ -341,19 +371,12 @@ bool FileEditor::handle_keydown (unsigned int key, int modifiers)
 	auto area = get_client_area (path);
 
 	// Reconstruct full path to look up per-file position in persistent context
-	auto target = get_edit_target ();
-	auto pwd = get_edit_pwd ();
-	if (target == nullptr || pwd == nullptr)
+	auto full_path = get_full_path ();
+
+	if (full_path.empty ())
 	{
 		return false;
 	}
-
-	auto full_path = *pwd;
-	if (full_path.back () != L'\\' && full_path.back () != L'/')
-	{
-		full_path += L"\\";
-	}
-	full_path += *target;
 
 	auto top = get_file_top_line (full_path);
 	auto left = get_file_left_column (full_path);
@@ -372,6 +395,14 @@ bool FileEditor::handle_keydown (unsigned int key, int modifiers)
 		// The movement keys always succeed; the text editing keys report
 		// whether they actually changed anything
 		bool handled = true;
+
+		// The vertical movement keeps the display column of the cursor,
+		// which may differ from its logical position on a line with tabs
+		bool vertical = key == VK_UP || key == VK_DOWN || key == VK_PRIOR || key == VK_NEXT;
+		auto tab_width = *get_tab_width (current_display->get_persistent_context ());
+		auto keep_column = vertical
+			? file_line_display_pos (get_file (), *cursor_line, *cursor_pos, tab_width)
+			: -1;
 
 		if (key == VK_UP)
 		{
@@ -451,6 +482,13 @@ bool FileEditor::handle_keydown (unsigned int key, int modifiers)
 			return false;
 		}
 
+		// The kept display column is converted back to the logical position
+		// in the line the cursor has arrived to
+		if (vertical)
+		{
+			*cursor_pos = file_line_raw_pos (get_file (), *cursor_line, keep_column, tab_width);
+		}
+
 		// The cursor cannot go beyond the first line and its first position
 		*cursor_line = max (*cursor_line, 0);
 		*cursor_pos = max (*cursor_pos, 0);
@@ -506,30 +544,6 @@ static std::list<FileLine>::iterator line_iterator (File *file, int line)
 static bool is_utf8_continuation (char byte)
 {
 	return ((unsigned char) byte & 0xC0) == 0x80;
-}
-
-// The byte length of the utf-8 character sequence starting with the given
-// lead byte; a malformed lead byte is treated as a single byte
-static int utf8_char_length (char lead)
-{
-	auto b = (unsigned char) lead;
-
-	if ((b & 0xE0) == 0xC0)
-	{
-		return 2;
-	}
-
-	if ((b & 0xF0) == 0xE0)
-	{
-		return 3;
-	}
-
-	if ((b & 0xF8) == 0xF0)
-	{
-		return 4;
-	}
-
-	return 1;
 }
 
 bool FileEditor::insert_typed_char (unsigned int key, int modifiers, int *cursor_line, int *cursor_pos)
@@ -756,6 +770,29 @@ std::wstring * FileEditor::get_edit_pwd ()
 	// No default can be provided for this parameter because it is set
 	// from outside (the file manager) together with edit-target
 	return current_context->get<std::wstring> ("edit-pwd");
+}
+
+std::wstring FileEditor::get_full_path ()
+{
+	auto target = get_edit_target ();
+	auto pwd = get_edit_pwd ();
+
+	// No target or working directory - no file is being edited
+	if (target == nullptr || target->empty () || pwd == nullptr || pwd->empty ())
+	{
+		return {};
+	}
+
+	auto full_path = *pwd;
+
+	if (full_path.back () != L'\\' && full_path.back () != L'/')
+	{
+		full_path += L"\\";
+	}
+
+	full_path += *target;
+
+	return full_path;
 }
 
 std::wstring * FileEditor::get_viewed_path ()

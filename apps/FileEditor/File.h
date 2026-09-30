@@ -25,6 +25,10 @@ constexpr int UNKNOWN_LINE_COUNT = -1;
 // position = column of the first space of the tab expansion, length = expansion width including the arrow.
 std::pair<std::wstring, std::vector<std::pair<int, int>>> expand_tabs (const std::string &line, int tab_width);
 
+// The byte length of the utf-8 character sequence starting with the given
+// lead byte; a malformed lead byte is treated as a single byte
+int utf8_char_length (char lead);
+
 // The tab width of the file editor, stored in the given persistent context, so
 // it survives restarts. A fresh environment uses 4. The width is kept within
 // the 1..9 range the display assumes
@@ -44,6 +48,13 @@ int file_line_length (File *file, int line);
 // position is displayed at the beginning of its expansion, the positions
 // beyond the line end occupy one cell each
 int file_line_display_pos (File *file, int line, int pos, int tab_width);
+
+// The inverse of file_line_display_pos: the raw position in the given line of
+// the given display position. The largest raw position displayed not past the
+// given display position is taken, so a display position within a tab
+// expansion is converted to the beginning of the tab; the display positions
+// past the line end occupy one cell each
+int file_line_raw_pos (File *file, int line, int display_pos, int tab_width);
 
 class File
 {

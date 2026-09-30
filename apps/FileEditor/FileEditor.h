@@ -25,6 +25,10 @@ class FileEditor : public App
 	std::vector<App *> * get_app_group ();
 	bool * get_is_editing ();
 
+	// The full path of the currently edited file; empty when no file is
+	// being edited (no target or working directory set)
+	std::wstring get_full_path ();
+
 	int * get_file_top_line (const std::wstring &full_path);
 	int * get_file_left_column (const std::wstring &full_path);
 	int * get_file_cursor_line (const std::wstring &full_path);

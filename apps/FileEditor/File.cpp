@@ -38,6 +38,28 @@ std::pair<std::wstring, std::vector<std::pair<int, int>>> expand_tabs (const std
 	return { out, tab_spans };
 }
 
+int utf8_char_length (char lead)
+{
+	auto b = (unsigned char) lead;
+
+	if ((b & 0xE0) == 0xC0)
+	{
+		return 2;
+	}
+
+	if ((b & 0xF0) == 0xE0)
+	{
+		return 3;
+	}
+
+	if ((b & 0xF8) == 0xF0)
+	{
+		return 4;
+	}
+
+	return 1;
+}
+
 int * get_tab_width (::Wenv::Context *persistent_context)
 {
 	auto tab_width = persistent_context->get<int> ("tab-width", [] () { return new int { 4 }; });
@@ -93,6 +115,54 @@ int file_line_display_pos (File *file, int line, int pos, int tab_width)
 
 	return (int) expand_tabs (it->raw_data.substr (0, within), tab_width).first.size ()
 		+ max (0, pos - raw_len);
+}
+
+int file_line_raw_pos (File *file, int line, int display_pos, int tab_width)
+{
+	// A display position on a line that is not in the file (beyond its end)
+	// has no tab expansion to account for; a negative display position is
+	// clamped to zero
+	if (file == nullptr || line < 0 || line >= (int) file->lines.size () || display_pos <= 0)
+	{
+		return max (display_pos, 0);
+	}
+
+	auto it = file->lines.begin ();
+	std::advance (it, line);
+
+	auto &raw = it->raw_data;
+	auto raw_len = (int) raw.size ();
+
+	// Walk the line counting the display position of each character: the
+	// result is the largest raw position displayed not past the given
+	// display position, so a tab spanning the display position is taken at
+	// its beginning
+	auto pos = 0;
+	auto col = 0;
+
+	while (pos < raw_len)
+	{
+		auto ch = raw[pos];
+		auto width = ch == '\t' ? tab_width - (col % tab_width) : 1;
+
+		// The character starts past the display position
+		if (col + width > display_pos)
+		{
+			break;
+		}
+
+		col += width;
+		pos += utf8_char_length (ch);
+	}
+
+	// The display positions past the line end occupy one cell each, so the
+	// raw position overshoots the line by the same number of cells
+	if (pos >= raw_len && col < display_pos)
+	{
+		pos += display_pos - col;
+	}
+
+	return pos;
 }
 
 File::File (const std::wstring &file_path)
