@@ -37,6 +37,11 @@ void show_open_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c
 // be copied
 void show_copy_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c);
 
+// Show the "Move a file" modal of the active file list panel: it behaves
+// exactly as the copy one, but the highlighted file is moved (renamed) to
+// the typed path instead of being copied
+void show_move_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c);
+
 class FileList : public App
 {
 	// The per-parameter accessors to the current context (see the .cpp)

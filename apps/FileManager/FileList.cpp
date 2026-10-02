@@ -468,6 +468,135 @@ static bool copy_recursively (const std::wstring &source, const std::wstring &de
 	return ok;
 }
 
+// Delete a file or a whole directory (with all its contents). Returns
+// whether everything has been deleted; the code of the first error met on
+// the way is stored into error
+static bool delete_recursively (const std::wstring &path, DWORD &error)
+{
+	auto attr = GetFileAttributesW (path.c_str ());
+
+	if (attr == INVALID_FILE_ATTRIBUTES)
+	{
+		if (error == ERROR_SUCCESS)
+		{
+			error = GetLastError ();
+		}
+
+		return false;
+	}
+
+	if (!(attr & FILE_ATTRIBUTE_DIRECTORY))
+	{
+		if (DeleteFileW (path.c_str ()) != 0)
+		{
+			return true;
+		}
+
+		if (error == ERROR_SUCCESS)
+		{
+			error = GetLastError ();
+		}
+
+		return false;
+	}
+
+	auto *contents = list_directory_contents (path);
+	auto ok = contents != nullptr;
+
+	if (ok)
+	{
+		for (auto &fd : *contents)
+		{
+			auto name = std::wstring { fd.cFileName };
+
+			// The parent entry is not a part of the directory contents
+			if (name == L"..")
+			{
+				continue;
+			}
+
+			ok = delete_recursively (path + L"\\" + name, error) && ok;
+		}
+
+		delete contents;
+	}
+
+	if (!ok)
+	{
+		return false;
+	}
+
+	// The directory itself is removable once it is empty
+	if (RemoveDirectoryW (path.c_str ()) != 0)
+	{
+		return true;
+	}
+
+	if (error == ERROR_SUCCESS)
+	{
+		error = GetLastError ();
+	}
+
+	return false;
+}
+
+// Move (rename) a file or a whole directory to the given target path. A move
+// within one volume is a rename, a cross-volume one degenerates into a copy
+// with the source deleted afterwards; an existing target file is overwritten,
+// an existing target directory receives the contents of the source. Returns
+// whether the move has succeeded; the code of the first error met on the way
+// is stored into error
+static bool move_recursively (const std::wstring &source, const std::wstring &dest, DWORD &error)
+{
+	// An existing target directory receives the contents, so the move is a
+	// copy followed by the removal of the source
+	if (is_directory (dest))
+	{
+		if (!copy_recursively (source, dest, error))
+		{
+			return false;
+		}
+
+		return delete_recursively (source, error);
+	}
+
+	// The missing intermediate directories of the target path are created
+	auto pos = dest.find_last_of (L"\\/");
+
+	if (pos != std::wstring::npos && pos > 0 && !create_directories (dest.substr (0, pos), error))
+	{
+		return false;
+	}
+
+	// A same-volume move is a plain rename; the copy-allowed flag also moves
+	// a file across the volumes, but not a directory
+	if (MoveFileExW (source.c_str (), dest.c_str (), MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED))
+	{
+		return true;
+	}
+
+	auto move_error = GetLastError ();
+
+	// A directory cannot be moved across the volumes this way: it is copied
+	// and the original is deleted then
+	if (move_error != ERROR_NOT_SAME_DEVICE)
+	{
+		if (error == ERROR_SUCCESS)
+		{
+			error = move_error;
+		}
+
+		return false;
+	}
+
+	if (!copy_recursively (source, dest, error))
+	{
+		return false;
+	}
+
+	return delete_recursively (source, error);
+}
+
 // Forget the cached directory listings of both panels, so the files copied
 // into the shown directories show up on the next redraw
 static void refresh_file_lists (::Wenv::Display::Display *display)
@@ -484,23 +613,32 @@ static void refresh_file_lists (::Wenv::Display::Display *display)
 	}
 }
 
-// The command of the Copy button of the "Copy a file" modal
-static void copy_modal_file (::Wenv::Display::Display *display);
+// The command of the Copy/Move button of the file operation modal
+static void operation_modal_file (::Wenv::Display::Display *display);
 
-// Show the "Copy a file" modal with the given text input prefill
-static void show_copy_file_modal_with (::Wenv::Display::Display *display, const std::wstring &prefill)
+// Show the "Copy a file" / "Move a file" modal with the given text input
+// prefill. The kind of the pending operation is remembered in the modal
+// context, so the button commands observe it
+static void show_file_operation_modal_with (::Wenv::Display::Display *display, bool is_move, const std::wstring &prefill)
 {
+	auto ctx = display->get_context ("modal");
+
+	if (ctx != nullptr)
+	{
+		ctx->set ("op-move", new bool { is_move });
+	}
+
 	std::vector<::Wenv::Display::ModalButton> buttons =
 	{
-		{ L"Copy", copy_modal_file },
+		{ is_move ? L"Move" : L"Copy", operation_modal_file },
 		{ L"Cancel", nullptr }
 	};
 
 	display->show_modal
 	(
 		"text-input",
-		L"Copy a file",
-		L"Copy to:",
+		is_move ? L"Move a file" : L"Copy a file",
+		is_move ? L"Move to:" : L"Copy to:",
 		buttons,
 		::Wenv::Display::Palette::Active_element_color,
 		::Wenv::Display::Palette::Default_color,
@@ -510,23 +648,23 @@ static void show_copy_file_modal_with (::Wenv::Display::Display *display, const 
 }
 
 // The command of the Try again button of the warning modal
-static void retry_copy (::Wenv::Display::Display *display);
+static void retry_operation (::Wenv::Display::Display *display);
 
-// Show the warning modal reporting the given copy error, in the warning
-// color. The Try again button restarts the copying, the Cancel one just
-// closes the modal
-static void show_copy_error_modal (::Wenv::Display::Display *display, const std::wstring &error_message)
+// Show the warning modal reporting the given file operation error, in the
+// warning color. The Try again button restarts the operation, the Cancel one
+// just closes the modal
+static void show_operation_error_modal (::Wenv::Display::Display *display, bool is_move, const std::wstring &error_message)
 {
 	std::vector<::Wenv::Display::ModalButton> buttons =
 	{
-		{ L"Try again", retry_copy },
+		{ L"Try again", retry_operation },
 		{ L"Cancel", nullptr }
 	};
 
 	display->show_modal
 	(
 		"warning",
-		L"Copy failed",
+		is_move ? L"Move failed" : L"Copy failed",
 		error_message,
 		buttons,
 		::Wenv::Display::Palette::Warning_element_color,
@@ -535,34 +673,34 @@ static void show_copy_error_modal (::Wenv::Display::Display *display, const std:
 	);
 }
 
-// Attempt the copy of the given source to the given destination: on success
-// the panel listings are refreshed and an empty string is returned, on
-// failure the error message to show is
-static std::wstring attempt_copy (::Wenv::Display::Display *display, const std::wstring &source, const std::wstring &dest)
+// Attempt the file operation of the given kind with the given source and
+// destination: on success the panel listings are refreshed and an empty
+// string is returned, on failure the error message to show is
+static std::wstring attempt_file_operation (::Wenv::Display::Display *display, const std::wstring &source, const std::wstring &dest, bool is_move)
 {
-	// A directory cannot be copied into itself
+	// A directory cannot be copied or moved into itself
 	if (is_directory (source) && is_copy_into_self (source, dest))
 	{
-		return L"Cannot copy a directory into itself";
+		return is_move ? L"Cannot move a directory into itself" : L"Cannot copy a directory into itself";
 	}
 
 	DWORD error = ERROR_SUCCESS;
 
-	if (!copy_recursively (source, dest, error))
+	if (is_move ? !move_recursively (source, dest, error) : !copy_recursively (source, dest, error))
 	{
-		return error != ERROR_SUCCESS ? get_error_message (error) : L"The copy has failed";
+		return error != ERROR_SUCCESS ? get_error_message (error) : L"The operation has failed";
 	}
 
-	// The copy may have landed in either of the shown directories, so both
-	// panels rescan them
+	// The operation may have changed either of the shown directories, so
+	// both panels rescan them
 	refresh_file_lists (display);
 
 	return L"";
 }
 
-// The command of the Try again button of the warning modal: the pending copy
-// is attempted again, a new failure brings the warning modal back up
-static void retry_copy (::Wenv::Display::Display *display)
+// The command of the Try again button of the warning modal: the pending
+// operation is attempted again, a new failure brings the warning modal back up
+static void retry_operation (::Wenv::Display::Display *display)
 {
 	auto ctx = display->get_context ("modal");
 
@@ -571,27 +709,29 @@ static void retry_copy (::Wenv::Display::Display *display)
 		return;
 	}
 
-	// The pending copy is remembered in the modal context by the command
-	// that has shown the warning modal
-	auto source = ctx->get<std::wstring> ("copy-source");
-	auto dest = ctx->get<std::wstring> ("copy-dest");
+	// The pending operation is remembered in the modal context by the
+	// command that has shown the warning modal
+	auto source = ctx->get<std::wstring> ("op-source");
+	auto dest = ctx->get<std::wstring> ("op-dest");
+	auto is_move = ctx->get<bool> ("op-move");
 
-	if (source == nullptr || dest == nullptr)
+	if (source == nullptr || dest == nullptr || is_move == nullptr)
 	{
 		return;
 	}
 
-	auto error_message = attempt_copy (display, *source, *dest);
+	auto error_message = attempt_file_operation (display, *source, *dest, *is_move);
 
 	if (!error_message.empty ())
 	{
-		show_copy_error_modal (display, error_message);
+		show_operation_error_modal (display, *is_move, error_message);
 	}
 }
 
-// Compute the copy source and destination from the state of the given panel
-// and the path typed into the input box; return whether they could be resolved
-static bool resolve_copy_paths (::Wenv::Context *c, const std::wstring &input, std::wstring &source, std::wstring &dest)
+// Compute the operation source and destination from the state of the given
+// panel and the path typed into the input box; return whether they could be
+// resolved
+static bool resolve_operation_paths (::Wenv::Context *c, const std::wstring &input, std::wstring &source, std::wstring &dest)
 {
 	auto pwd = c->get<std::wstring> ("pwd");
 
@@ -619,54 +759,56 @@ static bool resolve_copy_paths (::Wenv::Context *c, const std::wstring &input, s
 	return true;
 }
 
-// The command of the Copy button of the "Copy a file" modal: the file selected
-// in the active panel is copied to the path typed into the text input box. An
-// empty name does nothing: the modal is shown again unchanged, a failed copy
-// brings the warning modal up instead
-static void copy_modal_file (::Wenv::Display::Display *display)
+// The command of the Copy/Move button of the file operation modal: the file
+// selected in the active panel is copied or moved to the path typed into the
+// text input box. An empty name does nothing: the modal is shown again
+// unchanged, a failed operation brings the warning modal up instead
+static void operation_modal_file (::Wenv::Display::Display *display)
 {
 	auto ctx = display->get_context ("modal");
 
 	// The panel that was active when the modal was shown still holds the
-	// focus, so its selection decides what is copied
+	// focus, so its selection decides what is operated on
 	if (ctx == nullptr || display->focused_context == nullptr)
 	{
 		return;
 	}
 
 	auto input = ctx->get<std::wstring> ("modal-text-input");
+	auto is_move = ctx->get<bool> ("op-move");
 
-	if (input == nullptr || input->empty ())
+	if (input == nullptr || input->empty () || is_move == nullptr)
 	{
-		show_copy_file_modal_with (display, L"");
+		show_file_operation_modal_with (display, is_move != nullptr && *is_move, L"");
 		return;
 	}
 
 	std::wstring source, dest;
 
-	if (!resolve_copy_paths (display->focused_context, *input, source, dest))
+	if (!resolve_operation_paths (display->focused_context, *input, source, dest))
 	{
-		show_copy_file_modal_with (display, *input);
+		show_file_operation_modal_with (display, *is_move, *input);
 		return;
 	}
 
-	// The pending copy is remembered in the modal context, so the Try again
-	// button of the warning modal can restart it
-	ctx->set ("copy-source", new std::wstring { source });
-	ctx->set ("copy-dest", new std::wstring { dest });
+	// The pending operation is remembered in the modal context, so the Try
+	// again button of the warning modal can restart it
+	ctx->set ("op-source", new std::wstring { source });
+	ctx->set ("op-dest", new std::wstring { dest });
 
-	auto error_message = attempt_copy (display, source, dest);
+	auto error_message = attempt_file_operation (display, source, dest, *is_move);
 
 	if (!error_message.empty ())
 	{
-		show_copy_error_modal (display, error_message);
+		show_operation_error_modal (display, *is_move, error_message);
 	}
 }
 
-void show_copy_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c)
+// The shared body of the copy and the move modals of the active file list
+// panel: the selection is read from the context of the panel, so the call
+// may come either from the func menu or from the file list itself
+static void show_file_operation_modal (::Wenv::Display::Display *display, ::Wenv::Context *c, bool is_move)
 {
-	// The selection is read from the context of the panel, so the call may
-	// come either from the func menu or from the file list itself
 	auto pwd = c->get<std::wstring> ("pwd");
 
 	if (pwd == nullptr)
@@ -682,8 +824,8 @@ void show_copy_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c
 		return;
 	}
 
-	// The parent directory entry cannot be copied, so the modal does not
-	// show up at all when it is selected
+	// The parent directory entry cannot be copied or moved, so the modal
+	// does not show up at all when it is selected
 	if (std::wstring { (*lst)[*idx].cFileName } == L"..")
 	{
 		return;
@@ -698,7 +840,17 @@ void show_copy_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c
 		prefill = *opposite_pwd;
 	}
 
-	show_copy_file_modal_with (display, prefill);
+	show_file_operation_modal_with (display, is_move, prefill);
+}
+
+void show_copy_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c)
+{
+	show_file_operation_modal (display, c, false);
+}
+
+void show_move_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c)
+{
+	show_file_operation_modal (display, c, true);
 }
 
 bool is_executable_file (const std::wstring &filename)
