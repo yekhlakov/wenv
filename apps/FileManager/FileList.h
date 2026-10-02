@@ -26,6 +26,17 @@ void show_selected_file (::Wenv::Display::Display *display, ::Wenv::Context *c, 
 // yet is created when the edited content is saved
 void show_open_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c);
 
+// Show the "Copy a file" modal of the active file list panel. The text input
+// box of the modal is prefilled with the working directory of the opposite
+// panel; the Copy button copies the file highlighted in the panel to the
+// typed path: an existing directory receives the file under its own name,
+// the missing intermediate directories are created on the way, a highlighted
+// directory is copied along with all its contents. A failed copy shows the
+// warning modal with the error message, offering to try again or to cancel.
+// The modal does not show up when the ".." entry is selected, since it cannot
+// be copied
+void show_copy_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c);
+
 class FileList : public App
 {
 	// The per-parameter accessors to the current context (see the .cpp)

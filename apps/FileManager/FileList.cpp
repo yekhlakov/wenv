@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cwchar>
 #include <map>
 #include <regex>
 #include <Shlwapi.h>
@@ -187,7 +188,7 @@ static void show_open_file_modal_with (::Wenv::Display::Display *display, const 
 
 	display->show_modal
 	(
-		"open-file",
+		"text-input",
 		L"Open a file for editing",
 		L"File name:",
 		buttons,
@@ -247,6 +248,457 @@ void show_open_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c
 	}
 
 	show_open_file_modal_with (display, prefill);
+}
+
+// The working directory of the panel opposite to the given one; the panel
+// contexts are named "file-manager-left-panel" and "file-manager-right-panel"
+static std::wstring * get_opposite_pwd (::Wenv::Display::Display *display, ::Wenv::Context *c)
+{
+	if (display == nullptr || c == nullptr)
+	{
+		return nullptr;
+	}
+
+	auto target = std::string { "file-manager-right-panel" };
+
+	if (c->get_name () == target)
+	{
+		target = "file-manager-left-panel";
+	}
+
+	auto ctx = display->get_context (target);
+
+	return ctx != nullptr ? ctx->get<std::wstring> ("pwd") : nullptr;
+}
+
+// Whether the path is absolute (drive-lettered or rooted); a relative path
+// points into the working directory of the panel the file is copied from
+static bool is_absolute_path (const std::wstring &path)
+{
+	return path.size () >= 2 && path[1] == L':'
+		|| !path.empty () && path[0] == L'\\';
+}
+
+// Whether the given path is an existing directory
+static bool is_directory (const std::wstring &path)
+{
+	auto attr = GetFileAttributesW (path.c_str ());
+	return attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY) != 0;
+}
+
+// The target path of the copy: an existing directory in the input receives
+// the file under its own name, otherwise the input is the target path itself
+static std::wstring resolve_copy_destination (const std::wstring &target, const std::wstring &filename)
+{
+	if (!is_directory (target))
+	{
+		return target;
+	}
+
+	auto dest = target;
+
+	if (dest.back () != L'\\')
+	{
+		dest += L"\\";
+	}
+
+	return dest + filename;
+}
+
+// Create the given directory together with its missing parent directories.
+// Returns whether the directory exists in the end; the code of the first
+// error met on the way is stored into error
+static bool create_directories (const std::wstring &path, DWORD &error)
+{
+	if (path.empty ())
+	{
+		return false;
+	}
+
+	// Anything that already exists needs no creation
+	if (GetFileAttributesW (path.c_str ()) != INVALID_FILE_ATTRIBUTES)
+	{
+		return true;
+	}
+
+	// The parents are created first, then the directory itself
+	auto pos = path.find_last_of (L"\\/");
+
+	if (pos != std::wstring::npos && pos > 0)
+	{
+		create_directories (path.substr (0, pos), error);
+	}
+
+	if (CreateDirectoryW (path.c_str (), nullptr) != 0 || GetLastError () == ERROR_ALREADY_EXISTS)
+	{
+		return true;
+	}
+
+	if (error == ERROR_SUCCESS)
+	{
+		error = GetLastError ();
+	}
+
+	return false;
+}
+
+// The system error message for the given error code, with the trailing line
+// breaks FormatMessage appends trimmed off
+static std::wstring get_error_message (DWORD error)
+{
+	wchar_t *buffer = nullptr;
+
+	auto len = FormatMessageW
+	(
+		FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+		nullptr,
+		error,
+		MAKELANGID (LANG_NEUTRAL, SUBLANG_DEFAULT),
+		(wchar_t *) &buffer,
+		0,
+		nullptr
+	);
+
+	std::wstring message;
+
+	if (len > 0 && buffer != nullptr)
+	{
+		message = buffer;
+
+		while (!message.empty () && (message.back () == L'\r' || message.back () == L'\n' || message.back () == L' '))
+		{
+			message.pop_back ();
+		}
+	}
+
+	if (buffer != nullptr)
+	{
+		LocalFree (buffer);
+	}
+
+	// A code the system has no message for is reported as its number
+	return !message.empty () ? message : L"Error " + std::to_wstring (error);
+}
+
+// Whether the destination coincides with the source directory or lies inside
+// it (the Win32 paths are case-insensitive): copying a directory into itself
+// would recurse forever
+static bool is_copy_into_self (const std::wstring &source, const std::wstring &dest)
+{
+	if (_wcsicmp (source.c_str (), dest.c_str ()) == 0)
+	{
+		return true;
+	}
+
+	auto dir = source.back () == L'\\' ? source : source + L"\\";
+	return dest.size () > dir.size () && _wcsnicmp (dest.c_str (), dir.c_str (), dir.size ()) == 0;
+}
+
+// Copy a file or a whole directory (with all its contents) to the given
+// target path. A target directory that already exists receives the contents
+// of the source, a missing one is created along with its parents; an existing
+// target file is overwritten. Returns whether the copy has succeeded; the
+// code of the first error met on the way is stored into error
+static bool copy_recursively (const std::wstring &source, const std::wstring &dest, DWORD &error)
+{
+	auto attr = GetFileAttributesW (source.c_str ());
+
+	if (attr == INVALID_FILE_ATTRIBUTES)
+	{
+		if (error == ERROR_SUCCESS)
+		{
+			error = GetLastError ();
+		}
+
+		return false;
+	}
+
+	if (!(attr & FILE_ATTRIBUTE_DIRECTORY))
+	{
+		// A file: the missing intermediate directories of its target path
+		// are created, then the file is copied
+		auto pos = dest.find_last_of (L"\\/");
+
+		if (pos != std::wstring::npos && pos > 0 && !create_directories (dest.substr (0, pos), error))
+		{
+			return false;
+		}
+
+		if (CopyFileW (source.c_str (), dest.c_str (), FALSE) == 0)
+		{
+			if (error == ERROR_SUCCESS)
+			{
+				error = GetLastError ();
+			}
+
+			return false;
+		}
+
+		return true;
+	}
+
+	// A directory: the target directory is created when missing and the
+	// contents go into it entry by entry
+	if (!create_directories (dest, error))
+	{
+		return false;
+	}
+
+	auto *contents = list_directory_contents (source);
+	auto ok = contents != nullptr;
+
+	if (ok)
+	{
+		for (auto &fd : *contents)
+		{
+			auto name = std::wstring { fd.cFileName };
+
+			// The parent entry is not a part of the directory contents
+			if (name == L"..")
+			{
+				continue;
+			}
+
+			ok = copy_recursively (source + L"\\" + name, dest + L"\\" + name, error) && ok;
+		}
+
+		delete contents;
+	}
+
+	return ok;
+}
+
+// Forget the cached directory listings of both panels, so the files copied
+// into the shown directories show up on the next redraw
+static void refresh_file_lists (::Wenv::Display::Display *display)
+{
+	for (auto panel : { "file-manager-left-panel", "file-manager-right-panel" })
+	{
+		auto ctx = display->get_context (panel);
+
+		if (ctx != nullptr)
+		{
+			ctx->erase ("list");
+			ctx->erase ("sorted-list");
+		}
+	}
+}
+
+// The command of the Copy button of the "Copy a file" modal
+static void copy_modal_file (::Wenv::Display::Display *display);
+
+// Show the "Copy a file" modal with the given text input prefill
+static void show_copy_file_modal_with (::Wenv::Display::Display *display, const std::wstring &prefill)
+{
+	std::vector<::Wenv::Display::ModalButton> buttons =
+	{
+		{ L"Copy", copy_modal_file },
+		{ L"Cancel", nullptr }
+	};
+
+	display->show_modal
+	(
+		"text-input",
+		L"Copy a file",
+		L"Copy to:",
+		buttons,
+		::Wenv::Display::Palette::Active_element_color,
+		::Wenv::Display::Palette::Default_color,
+		::Wenv::Display::Palette::Default_color,
+		prefill
+	);
+}
+
+// The command of the Try again button of the warning modal
+static void retry_copy (::Wenv::Display::Display *display);
+
+// Show the warning modal reporting the given copy error, in the warning
+// color. The Try again button restarts the copying, the Cancel one just
+// closes the modal
+static void show_copy_error_modal (::Wenv::Display::Display *display, const std::wstring &error_message)
+{
+	std::vector<::Wenv::Display::ModalButton> buttons =
+	{
+		{ L"Try again", retry_copy },
+		{ L"Cancel", nullptr }
+	};
+
+	display->show_modal
+	(
+		"warning",
+		L"Copy failed",
+		error_message,
+		buttons,
+		::Wenv::Display::Palette::Warning_element_color,
+		::Wenv::Display::Palette::Warning_element_color,
+		::Wenv::Display::Palette::Default_color
+	);
+}
+
+// Attempt the copy of the given source to the given destination: on success
+// the panel listings are refreshed and an empty string is returned, on
+// failure the error message to show is
+static std::wstring attempt_copy (::Wenv::Display::Display *display, const std::wstring &source, const std::wstring &dest)
+{
+	// A directory cannot be copied into itself
+	if (is_directory (source) && is_copy_into_self (source, dest))
+	{
+		return L"Cannot copy a directory into itself";
+	}
+
+	DWORD error = ERROR_SUCCESS;
+
+	if (!copy_recursively (source, dest, error))
+	{
+		return error != ERROR_SUCCESS ? get_error_message (error) : L"The copy has failed";
+	}
+
+	// The copy may have landed in either of the shown directories, so both
+	// panels rescan them
+	refresh_file_lists (display);
+
+	return L"";
+}
+
+// The command of the Try again button of the warning modal: the pending copy
+// is attempted again, a new failure brings the warning modal back up
+static void retry_copy (::Wenv::Display::Display *display)
+{
+	auto ctx = display->get_context ("modal");
+
+	if (ctx == nullptr)
+	{
+		return;
+	}
+
+	// The pending copy is remembered in the modal context by the command
+	// that has shown the warning modal
+	auto source = ctx->get<std::wstring> ("copy-source");
+	auto dest = ctx->get<std::wstring> ("copy-dest");
+
+	if (source == nullptr || dest == nullptr)
+	{
+		return;
+	}
+
+	auto error_message = attempt_copy (display, *source, *dest);
+
+	if (!error_message.empty ())
+	{
+		show_copy_error_modal (display, error_message);
+	}
+}
+
+// Compute the copy source and destination from the state of the given panel
+// and the path typed into the input box; return whether they could be resolved
+static bool resolve_copy_paths (::Wenv::Context *c, const std::wstring &input, std::wstring &source, std::wstring &dest)
+{
+	auto pwd = c->get<std::wstring> ("pwd");
+
+	if (pwd == nullptr || pwd->empty ())
+	{
+		return false;
+	}
+
+	auto lst = c->get<File_list_type> ("sorted-list");
+	auto idx = get_selected_file_idx (c, *pwd);
+
+	if (lst == nullptr || *idx < 0 || *idx >= (int) lst->size ())
+	{
+		return false;
+	}
+
+	auto filename = std::wstring { (*lst)[*idx].cFileName };
+
+	// A relative input path points into the working directory of the panel
+	auto target = is_absolute_path (input) ? input : *pwd + L"\\" + input;
+
+	source = *pwd + L"\\" + filename;
+	dest = resolve_copy_destination (target, filename);
+
+	return true;
+}
+
+// The command of the Copy button of the "Copy a file" modal: the file selected
+// in the active panel is copied to the path typed into the text input box. An
+// empty name does nothing: the modal is shown again unchanged, a failed copy
+// brings the warning modal up instead
+static void copy_modal_file (::Wenv::Display::Display *display)
+{
+	auto ctx = display->get_context ("modal");
+
+	// The panel that was active when the modal was shown still holds the
+	// focus, so its selection decides what is copied
+	if (ctx == nullptr || display->focused_context == nullptr)
+	{
+		return;
+	}
+
+	auto input = ctx->get<std::wstring> ("modal-text-input");
+
+	if (input == nullptr || input->empty ())
+	{
+		show_copy_file_modal_with (display, L"");
+		return;
+	}
+
+	std::wstring source, dest;
+
+	if (!resolve_copy_paths (display->focused_context, *input, source, dest))
+	{
+		show_copy_file_modal_with (display, *input);
+		return;
+	}
+
+	// The pending copy is remembered in the modal context, so the Try again
+	// button of the warning modal can restart it
+	ctx->set ("copy-source", new std::wstring { source });
+	ctx->set ("copy-dest", new std::wstring { dest });
+
+	auto error_message = attempt_copy (display, source, dest);
+
+	if (!error_message.empty ())
+	{
+		show_copy_error_modal (display, error_message);
+	}
+}
+
+void show_copy_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c)
+{
+	// The selection is read from the context of the panel, so the call may
+	// come either from the func menu or from the file list itself
+	auto pwd = c->get<std::wstring> ("pwd");
+
+	if (pwd == nullptr)
+	{
+		return;
+	}
+
+	auto lst = c->get<File_list_type> ("sorted-list");
+	auto idx = get_selected_file_idx (c, *pwd);
+
+	if (lst == nullptr || *idx < 0 || *idx >= (int) lst->size ())
+	{
+		return;
+	}
+
+	// The parent directory entry cannot be copied, so the modal does not
+	// show up at all when it is selected
+	if (std::wstring { (*lst)[*idx].cFileName } == L"..")
+	{
+		return;
+	}
+
+	// The input is prefilled with the directory the opposite panel shows
+	std::wstring prefill;
+	auto opposite_pwd = get_opposite_pwd (display, c);
+
+	if (opposite_pwd != nullptr && !opposite_pwd->empty ())
+	{
+		prefill = *opposite_pwd;
+	}
+
+	show_copy_file_modal_with (display, prefill);
 }
 
 bool is_executable_file (const std::wstring &filename)

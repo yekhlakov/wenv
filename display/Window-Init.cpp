@@ -111,7 +111,8 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_editor_commands
 // Build the default func menu command list of the file list: in addition to
 // the common F10 "Exit" it has the F3 "View" and F4 "Edit" commands, which show
 // the file selected in the panel in the editor - either closed for editing or
-// open for it, which its status bar shows as a lock
+// open for it, which its status bar shows as a lock, and the F5 "Copy" command,
+// which shows the modal asking where to copy the selected file to
 std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_list_commands ()
 {
 	auto commands = make_func_menu_default_commands ();
@@ -131,6 +132,15 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_list_commands (
 		[] (::Wenv::Display::Display *display, ::Wenv::Context *context)
 		{
 			::Wenv::Apps::show_selected_file (display, context, true);
+		}
+	};
+
+	(*commands)[4] = {
+		L"Copy",
+
+		[] (::Wenv::Display::Display *display, ::Wenv::Context *context)
+		{
+			::Wenv::Apps::show_copy_file_modal (display, context);
 		}
 	};
 
@@ -293,16 +303,22 @@ void Window::initialize ()
             buttons
         );
 
-        // The "Open a file for editing" modal: its middle block holds the
-        // text input box (with the text block above it) instead of the plain
-        // text block
-        auto open_modal = new ::Wenv::Display::Modal {
+        // The text input modal shared by the commands that ask for a name of
+        // a file: its middle block holds the text input box (with the text
+        // block above it) instead of the plain text block. The modal boxes
+        // are interchangeable containers: their contents (title, text,
+        // buttons and the text input) are supplied by the command showing one
+        auto input_modal = new ::Wenv::Display::Modal {
             modal_title,
             modal_text_input,
             modal_buttons
         };
-        open_modal->has_input_line = true;
-        d->add_modal ("open-file", open_modal);
+        input_modal->has_input_line = true;
+        d->add_modal ("text-input", input_modal);
+
+        // The warning modal reporting a failed file operation: the plain
+        // text one, drawn in the warning color by the command that shows it
+        d->add_modal ("warning", new ::Wenv::Display::Modal { modal_title, modal_text, modal_buttons });
     }
 
     //--------------------------------------------------------------------------------------
