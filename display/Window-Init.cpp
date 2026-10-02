@@ -111,9 +111,9 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_editor_commands
 // Build the default func menu command list of the file list: in addition to
 // the common F10 "Exit" it has the F3 "View" and F4 "Edit" commands, which show
 // the file selected in the panel in the editor - either closed for editing or
-// open for it, which its status bar shows as a lock, and the F5 "Copy" and
-// F6 "Move" commands, which show the modal asking where to copy or move the
-// selected file to
+// open for it, which its status bar shows as a lock, and the F5 "Copy", F6
+// "Move" and F7 "Mkdir" commands, which show the modals asking where to copy
+// or move the selected file to, or what directory to create
 std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_list_commands ()
 {
 	auto commands = make_func_menu_default_commands ();
@@ -151,6 +151,15 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_list_commands (
 		[] (::Wenv::Display::Display *display, ::Wenv::Context *context)
 		{
 			::Wenv::Apps::show_move_file_modal (display, context);
+		}
+	};
+
+	(*commands)[6] = {
+		L"Mkdir",
+
+		[] (::Wenv::Display::Display *display, ::Wenv::Context *context)
+		{
+			::Wenv::Apps::show_mkdir_modal (display);
 		}
 	};
 

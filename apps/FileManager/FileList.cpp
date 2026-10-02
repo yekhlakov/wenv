@@ -613,6 +613,15 @@ static void refresh_file_lists (::Wenv::Display::Display *display)
 	}
 }
 
+// The kinds of the pending file operation stored in the modal context (as
+// an int), so the Try again button of the warning modal can restart it
+enum File_operation
+{
+	OP_COPY,
+	OP_MOVE,
+	OP_MKDIR
+};
+
 // The command of the Copy/Move button of the file operation modal
 static void operation_modal_file (::Wenv::Display::Display *display);
 
@@ -625,7 +634,7 @@ static void show_file_operation_modal_with (::Wenv::Display::Display *display, b
 
 	if (ctx != nullptr)
 	{
-		ctx->set ("op-move", new bool { is_move });
+		ctx->set ("op-kind", new int { is_move ? OP_MOVE : OP_COPY });
 	}
 
 	std::vector<::Wenv::Display::ModalButton> buttons =
@@ -653,7 +662,7 @@ static void retry_operation (::Wenv::Display::Display *display);
 // Show the warning modal reporting the given file operation error, in the
 // warning color. The Try again button restarts the operation, the Cancel one
 // just closes the modal
-static void show_operation_error_modal (::Wenv::Display::Display *display, bool is_move, const std::wstring &error_message)
+static void show_operation_error_modal (::Wenv::Display::Display *display, int kind, const std::wstring &error_message)
 {
 	std::vector<::Wenv::Display::ModalButton> buttons =
 	{
@@ -661,10 +670,13 @@ static void show_operation_error_modal (::Wenv::Display::Display *display, bool 
 		{ L"Cancel", nullptr }
 	};
 
+	// The modal title names the operation that has failed
+	auto title = kind == OP_COPY ? L"Copy failed" : kind == OP_MOVE ? L"Move failed" : L"Creation failed";
+
 	display->show_modal
 	(
 		"warning",
-		is_move ? L"Move failed" : L"Copy failed",
+		title,
 		error_message,
 		buttons,
 		::Wenv::Display::Palette::Warning_element_color,
@@ -698,6 +710,25 @@ static std::wstring attempt_file_operation (::Wenv::Display::Display *display, c
 	return L"";
 }
 
+// Attempt the creation of the directory by the given path (the whole missing
+// branch of it): on success the panel listings are refreshed and an empty
+// string is returned, on failure the error message to show is
+static std::wstring attempt_directory_creation (::Wenv::Display::Display *display, const std::wstring &path)
+{
+	DWORD error = ERROR_SUCCESS;
+
+	if (!create_directories (path, error))
+	{
+		return error != ERROR_SUCCESS ? get_error_message (error) : L"The directory has not been created";
+	}
+
+	// The new directory may have appeared in either of the shown ones, so
+	// both panels rescan them
+	refresh_file_lists (display);
+
+	return L"";
+}
+
 // The command of the Try again button of the warning modal: the pending
 // operation is attempted again, a new failure brings the warning modal back up
 static void retry_operation (::Wenv::Display::Display *display)
@@ -711,20 +742,42 @@ static void retry_operation (::Wenv::Display::Display *display)
 
 	// The pending operation is remembered in the modal context by the
 	// command that has shown the warning modal
-	auto source = ctx->get<std::wstring> ("op-source");
-	auto dest = ctx->get<std::wstring> ("op-dest");
-	auto is_move = ctx->get<bool> ("op-move");
+	auto kind = ctx->get<int> ("op-kind");
 
-	if (source == nullptr || dest == nullptr || is_move == nullptr)
+	if (kind == nullptr)
 	{
 		return;
 	}
 
-	auto error_message = attempt_file_operation (display, *source, *dest, *is_move);
+	std::wstring error_message;
+
+	if (*kind == OP_MKDIR)
+	{
+		auto dest = ctx->get<std::wstring> ("op-dest");
+
+		if (dest == nullptr)
+		{
+			return;
+		}
+
+		error_message = attempt_directory_creation (display, *dest);
+	}
+	else
+	{
+		auto source = ctx->get<std::wstring> ("op-source");
+		auto dest = ctx->get<std::wstring> ("op-dest");
+
+		if (source == nullptr || dest == nullptr)
+		{
+			return;
+		}
+
+		error_message = attempt_file_operation (display, *source, *dest, *kind == OP_MOVE);
+	}
 
 	if (!error_message.empty ())
 	{
-		show_operation_error_modal (display, *is_move, error_message);
+		show_operation_error_modal (display, *kind, error_message);
 	}
 }
 
@@ -775,11 +828,11 @@ static void operation_modal_file (::Wenv::Display::Display *display)
 	}
 
 	auto input = ctx->get<std::wstring> ("modal-text-input");
-	auto is_move = ctx->get<bool> ("op-move");
+	auto kind = ctx->get<int> ("op-kind");
 
-	if (input == nullptr || input->empty () || is_move == nullptr)
+	if (input == nullptr || input->empty () || kind == nullptr)
 	{
-		show_file_operation_modal_with (display, is_move != nullptr && *is_move, L"");
+		show_file_operation_modal_with (display, kind != nullptr && *kind == OP_MOVE, L"");
 		return;
 	}
 
@@ -787,7 +840,7 @@ static void operation_modal_file (::Wenv::Display::Display *display)
 
 	if (!resolve_operation_paths (display->focused_context, *input, source, dest))
 	{
-		show_file_operation_modal_with (display, *is_move, *input);
+		show_file_operation_modal_with (display, *kind == OP_MOVE, *input);
 		return;
 	}
 
@@ -796,11 +849,11 @@ static void operation_modal_file (::Wenv::Display::Display *display)
 	ctx->set ("op-source", new std::wstring { source });
 	ctx->set ("op-dest", new std::wstring { dest });
 
-	auto error_message = attempt_file_operation (display, source, dest, *is_move);
+	auto error_message = attempt_file_operation (display, source, dest, *kind == OP_MOVE);
 
 	if (!error_message.empty ())
 	{
-		show_operation_error_modal (display, *is_move, error_message);
+		show_operation_error_modal (display, *kind, error_message);
 	}
 }
 
@@ -851,6 +904,85 @@ void show_copy_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c
 void show_move_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c)
 {
 	show_file_operation_modal (display, c, true);
+}
+
+// The command of the Create button of the mkdir modal
+static void mkdir_modal_create (::Wenv::Display::Display *display);
+
+// Show the "Create a directory" modal with an empty text input; the Create
+// button creates the directory by the typed path in the working directory
+// of the panel focused when it is pressed
+void show_mkdir_modal (::Wenv::Display::Display *display)
+{
+	std::vector<::Wenv::Display::ModalButton> buttons =
+	{
+		{ L"Create", mkdir_modal_create },
+		{ L"Cancel", nullptr }
+	};
+
+	// The kind of the pending operation is remembered in the modal context,
+	// so the Try again button of the warning modal observes it
+	auto ctx = display->get_context ("modal");
+
+	if (ctx != nullptr)
+	{
+		ctx->set ("op-kind", new int { OP_MKDIR });
+	}
+
+	display->show_modal
+	(
+		"text-input",
+		L"Create a directory",
+		L"Directory name:",
+		buttons,
+		::Wenv::Display::Palette::Active_element_color,
+		::Wenv::Display::Palette::Default_color,
+		::Wenv::Display::Palette::Default_color
+	);
+}
+
+// The command of the Create button of the mkdir modal: the directory is
+// created by the path typed into the text input box, in the working directory
+// of the active panel. An empty name has no effect
+static void mkdir_modal_create (::Wenv::Display::Display *display)
+{
+	auto ctx = display->get_context ("modal");
+
+	// The panel that was active when the modal was shown still holds the
+	// focus, so its working directory receives the new directory
+	if (ctx == nullptr || display->focused_context == nullptr)
+	{
+		return;
+	}
+
+	auto input = ctx->get<std::wstring> ("modal-text-input");
+
+	// An empty name has no effect
+	if (input == nullptr || input->empty ())
+	{
+		return;
+	}
+
+	auto pwd = display->focused_context->get<std::wstring> ("pwd");
+
+	if (pwd == nullptr || pwd->empty ())
+	{
+		return;
+	}
+
+	// A relative path points into the working directory of the panel
+	auto path = is_absolute_path (*input) ? *input : *pwd + L"\\" + *input;
+
+	// The pending creation is remembered in the modal context, so the Try
+	// again button of the warning modal can restart it
+	ctx->set ("op-dest", new std::wstring { path });
+
+	auto error_message = attempt_directory_creation (display, path);
+
+	if (!error_message.empty ())
+	{
+		show_operation_error_modal (display, OP_MKDIR, error_message);
+	}
 }
 
 bool is_executable_file (const std::wstring &filename)

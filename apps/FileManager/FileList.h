@@ -42,6 +42,13 @@ void show_copy_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c
 // the typed path instead of being copied
 void show_move_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c);
 
+// Show the "Create a directory" modal of the active file list panel with an
+// empty text input; the Create button creates the directory by the typed
+// path (the whole missing branch of it) in the working directory of the
+// panel, a failed creation shows the warning modal with the error message,
+// offering to try again or to cancel
+void show_mkdir_modal (::Wenv::Display::Display *display);
+
 class FileList : public App
 {
 	// The per-parameter accessors to the current context (see the .cpp)
