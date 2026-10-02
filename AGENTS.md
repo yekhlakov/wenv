@@ -32,7 +32,7 @@ When your changes alter the code structure (new/moved/removed files or directori
 │ ├─/FileEditor	-- The text file viewer/editor app collection (File file wrapper, the editor, its status bar)
 │ ├─/FileManager -- The file manager app collection (file list, its header, short file info panel)
 │ ├─/FuncMenu	-- The menu of functional keys (to be displayed in the bottom of the screen)
-│ └─/Modal	-- The modal box components (title, text, buttons)
+│ └─/Modal	-- The modal box components (title, text, text input, buttons)
 ├─/display	-- window management and displaying of information; Display (core + Output/Input/Init parts), Window (core + Init/Input parts), Modal, Character, Palette
 ├─/layout	-- abstract-ish handling of display layouts (grid-based layout design): Grid, Layout
 ├─/maxy		-- imported (library) components: json, strings, escape, control (container/events); not a part of this project; maintained elsewhere; must not modify these; ignore compilation warnings here.

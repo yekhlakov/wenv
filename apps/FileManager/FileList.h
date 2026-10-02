@@ -19,6 +19,13 @@ int *get_selected_file_idx (::Wenv::Context *c, const std::wstring &dirname);
 // alone, since descending into it is the business of the file list itself
 void show_selected_file (::Wenv::Display::Display *display, ::Wenv::Context *c, bool is_editing);
 
+// Show the "Open a file for editing" modal of the active file list panel.
+// The text input box of the modal is prefilled with the name of the file
+// highlighted in the panel (when it is a regular file); the Open button of
+// the modal opens the typed file in the editor, a name that does not exist
+// yet is created when the edited content is saved
+void show_open_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c);
+
 class FileList : public App
 {
 	// The per-parameter accessors to the current context (see the .cpp)

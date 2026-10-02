@@ -147,6 +147,11 @@ void ModalButtons::activate (int index)
 	// display without the modal on top
 	current_display->current_modal = nullptr;
 
+	// The apps of the closed modal no longer hold the text cursor: hide it so
+	// it does not keep blinking over the display contents (the apps that own
+	// it make it visible again during their redraw)
+	current_display->is_cursor_visible = false;
+
 	if (command)
 	{
 		command (current_display);

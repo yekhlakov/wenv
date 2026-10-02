@@ -115,6 +115,32 @@ int *get_selected_file_idx (::Wenv::Context * c, const std::wstring &dirname)
 	return c->get<int> ("selected-file-idx " + maxy::strings::wchartoutf8 (dirname), [] () ->int *{ return new int { 0 }; });
 }
 
+// Open the given file of the panel working directory in the editor display,
+// either for viewing or for editing
+static void open_named_file (::Wenv::Display::Display *display, ::Wenv::Context *c, const std::wstring &filename, bool is_editing)
+{
+	auto pwd = c->get<std::wstring> ("pwd");
+
+	if (pwd == nullptr || pwd->empty () || filename.empty ())
+	{
+		return;
+	}
+
+	// The editor keeps the shown file together with the requested edit state
+	// in its own context, which it reads when it and its status bar redraw
+	auto ctx = display->window->get_display ("file-editor")->get_context ("file-editor");
+
+	// Opening a file starts a new editing session: the undo operations of
+	// the previous one do not apply
+	clear_undo (ctx);
+
+	ctx->set ("edit-target", new std::wstring { filename });
+	ctx->set ("edit-pwd", new std::wstring { *pwd });
+	ctx->set ("is_editing", new bool { is_editing });
+
+	display->window->set_display ("file-editor");
+}
+
 void show_selected_file (::Wenv::Display::Display *display, ::Wenv::Context *c, bool is_editing)
 {
 	// The selection is read from the context of the panel, so the call may
@@ -144,19 +170,83 @@ void show_selected_file (::Wenv::Display::Display *display, ::Wenv::Context *c, 
 		return;
 	}
 
-	// The editor keeps the shown file together with the requested edit state
-	// in its own context, which it reads when it and its status bar redraw
-	auto ctx = display->window->get_display ("file-editor")->get_context ("file-editor");
+	open_named_file (display, c, selected.cFileName, is_editing);
+}
 
-	// Opening a file starts a new editing session: the undo operations of
-	// the previous one do not apply
-	clear_undo (ctx);
+// The command of the Open button of the "Open a file for editing" modal
+static void open_modal_file (::Wenv::Display::Display *display);
 
-	ctx->set ("edit-target", new std::wstring { selected.cFileName });
-	ctx->set ("edit-pwd", new std::wstring { *pwd });
-	ctx->set ("is_editing", new bool { is_editing });
+// Show the "Open a file for editing" modal with the given text input prefill
+static void show_open_file_modal_with (::Wenv::Display::Display *display, const std::wstring &prefill)
+{
+	std::vector<::Wenv::Display::ModalButton> buttons =
+	{
+		{ L"Open", open_modal_file },
+		{ L"Cancel", nullptr }
+	};
 
-	display->window->set_display ("file-editor");
+	display->show_modal
+	(
+		"open-file",
+		L"Open a file for editing",
+		L"File name:",
+		buttons,
+		::Wenv::Display::Palette::Active_element_color,
+		::Wenv::Display::Palette::Default_color,
+		::Wenv::Display::Palette::Default_color,
+		prefill
+	);
+}
+
+// The command of the Open button of the "Open a file for editing" modal: the
+// file name typed into the text input box is opened in the editor. An empty
+// name does nothing: the modal is shown again unchanged
+static void open_modal_file (::Wenv::Display::Display *display)
+{
+	auto ctx = display->get_context ("modal");
+
+	if (ctx != nullptr)
+	{
+		auto input = ctx->get<std::wstring> ("modal-text-input");
+
+		// The panel that was active when the modal was shown still holds the
+		// focus, so its working directory is where the file is opened
+		if (input != nullptr && !input->empty () && display->focused_context != nullptr)
+		{
+			open_named_file (display, display->focused_context, *input, true);
+			return;
+		}
+	}
+
+	show_open_file_modal_with (display, L"");
+}
+
+void show_open_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c)
+{
+	// The input is prefilled with the file highlighted in the active panel;
+	// only a regular file name makes a sensible default, a highlighted
+	// directory (or no selection) leaves the box empty
+	std::wstring prefill;
+
+	auto pwd = c->get<std::wstring> ("pwd");
+
+	if (pwd != nullptr)
+	{
+		auto lst = c->get<File_list_type> ("sorted-list");
+		auto idx = get_selected_file_idx (c, *pwd);
+
+		if (lst != nullptr && *idx >= 0 && *idx < (int) lst->size ())
+		{
+			auto &selected = (*lst)[*idx];
+
+			if (!(selected.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+			{
+				prefill = selected.cFileName;
+			}
+		}
+	}
+
+	show_open_file_modal_with (display, prefill);
 }
 
 bool is_executable_file (const std::wstring &filename)

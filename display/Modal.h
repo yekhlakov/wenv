@@ -46,13 +46,18 @@ struct Modal
 	// window forwards every keypress to all of them
 	std::vector<::Wenv::Apps::App *> apps;
 
+	// Whether the middle block holds a text input box under the text: the
+	// block gets one extra line and the typed text counts into the width
+	bool has_input_line;
+
 	Modal (
 		::Wenv::Apps::App *title_app,
 		::Wenv::Apps::App *text_app,
 		::Wenv::Apps::App *buttons_app,
 		const std::string &border_color = ::Wenv::Display::Palette::Active_element_color,
 		const std::string &title_color = ::Wenv::Display::Palette::Default_color,
-		const std::string &text_color = ::Wenv::Display::Palette::Default_color
+		const std::string &text_color = ::Wenv::Display::Palette::Default_color,
+		bool has_input_line = false
 	);
 	~Modal ();
 

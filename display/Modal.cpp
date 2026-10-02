@@ -16,11 +16,13 @@ Modal::Modal
 	::Wenv::Apps::App *buttons_app,
 	const std::string &border_color,
 	const std::string &title_color,
-	const std::string &text_color
+	const std::string &text_color,
+	bool has_input_line
 ) :
 	border_color { border_color },
 	title_color { title_color },
 	text_color { text_color },
+	has_input_line { has_input_line },
 	grid { new ::Wenv::Layout::Grid {} },
 	inner_grid { new ::Wenv::Layout::Grid {} },
 	apps { title_app, text_app, buttons_app }
@@ -72,6 +74,7 @@ void Modal::draw (::Wenv::Display::Display &display)
 
 	auto title = ctx != nullptr ? ctx->get<std::wstring> ("modal-title") : nullptr;
 	auto text = ctx != nullptr ? ctx->get<std::wstring> ("modal-text") : nullptr;
+	auto input = ctx != nullptr ? ctx->get<std::wstring> ("modal-text-input") : nullptr;
 	auto buttons = ctx != nullptr ? ctx->get<std::vector<ModalButton>> ("modal-buttons") : nullptr;
 	auto border = ctx != nullptr ? ctx->get<std::string> ("modal-border-color") : nullptr;
 	auto title_clr = ctx != nullptr ? ctx->get<std::string> ("modal-title-color") : nullptr;
@@ -99,9 +102,14 @@ void Modal::draw (::Wenv::Display::Display &display)
 		buttons_len += (int) button_list.size () - 1;
 	}
 
-	// The modal must be wide enough for the title, the text and the buttons
-	auto content_width = (std::max) ((std::max) ((int) title_text.length (), text_rect.width), buttons_len);
-	auto content_height = (std::max) (text_rect.height, 1);
+	// The modal must be wide enough for the title, the text and the buttons;
+	// the input line adds its framed text ("[ ... ]") to the minimal width
+	auto input_len = has_input_line && input != nullptr ? (int) input->length () : 0;
+	auto content_width = (std::max) ((std::max) ((std::max) ((int) title_text.length (), text_rect.width), buttons_len), input_len + 4);
+
+	// The middle block gets one extra line for the text input box under the
+	// text, plus the two lines of its own borders
+	auto content_height = (std::max) (text_rect.height, 1) + (has_input_line ? 3 : 0);
 
 	// The outer double border adds 2 characters around the inner grid; the stacked
 	// single-bordered blocks add 4 more lines for their borders at the outer edges

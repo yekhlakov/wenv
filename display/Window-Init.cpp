@@ -17,6 +17,7 @@
 
 #include "../apps/Modal/ModalTitle.h"
 #include "../apps/Modal/ModalText.h"
+#include "../apps/Modal/ModalTextInput.h"
 #include "../apps/Modal/ModalButtons.h"
 
 namespace Wenv::Display
@@ -136,6 +137,25 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_list_commands (
 	return commands;
 }
 
+// Build the shift func menu command list of the file list: the Shift+F4
+// "Edit+" command shows the modal asking for the name of the file to open
+// for editing, prefilled with the file highlighted in the active panel
+std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_list_shift_commands ()
+{
+	auto commands = new std::vector<::Wenv::Apps::FuncMenuCommand> (12);
+
+	(*commands)[3] = {
+		L"Edit+",
+
+		[] (::Wenv::Display::Display *display, ::Wenv::Context *context)
+		{
+			::Wenv::Apps::show_open_file_modal (display, context);
+		}
+	};
+
+	return commands;
+}
+
 void Window::initialize ()
 {
     // Palette
@@ -187,6 +207,7 @@ void Window::initialize ()
         // F10 exits the application)
         auto main_context = d->add_context (new ::Wenv::Context { "file-manager" });
         main_context->set ("func_menu.default", make_func_menu_file_list_commands ());
+        main_context->set ("func_menu.shift", make_func_menu_file_list_shift_commands ());
 
         auto left_context = d->add_context (new ::Wenv::Context { "file-manager-left-panel" });
         left_context->parent = main_context;
@@ -251,6 +272,7 @@ void Window::initialize ()
         d->add_context (new ::Wenv::Context { "modal" });
         auto modal_title = d->add_app (new ::Wenv::Apps::ModalTitle { L"modal-title" });
         auto modal_text = d->add_app (new ::Wenv::Apps::ModalText { L"modal-text" });
+        auto modal_text_input = d->add_app (new ::Wenv::Apps::ModalTextInput { L"modal-text-input" });
         auto modal_buttons = d->add_app (new ::Wenv::Apps::ModalButtons { L"modal-buttons" });
 
         auto test_modal = new ::Wenv::Display::Modal {
@@ -270,6 +292,17 @@ void Window::initialize ()
             L"This is a test modal. It is drawn on top of the display contents, centered in the window.",
             buttons
         );
+
+        // The "Open a file for editing" modal: its middle block holds the
+        // text input box (with the text block above it) instead of the plain
+        // text block
+        auto open_modal = new ::Wenv::Display::Modal {
+            modal_title,
+            modal_text_input,
+            modal_buttons
+        };
+        open_modal->has_input_line = true;
+        d->add_modal ("open-file", open_modal);
     }
 
     //--------------------------------------------------------------------------------------

@@ -222,6 +222,16 @@ File::File (const std::wstring &file_path)
 
 	if (handle == INVALID_HANDLE_VALUE)
 	{
+		// A file that does not exist yet is opened as a new empty one, so
+		// the editor can create it on save; the other failures leave the
+		// file simply not loaded
+		auto error = GetLastError ();
+
+		if (error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND)
+		{
+			fully_loaded = true;
+		}
+
 		return;
 	}
 

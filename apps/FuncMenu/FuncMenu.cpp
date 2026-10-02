@@ -136,6 +136,13 @@ void FuncMenu::redraw (const std::string &path)
 		return;
 	}
 
+	// The tracked modifier state is synced with the actual key state: the
+	// releases that happened while a modal was open never reached the menu
+	// (the modal apps receive all the key events of the display then)
+	tracked_ctrl = current_display->get_key_state (VK_CONTROL);
+	tracked_alt = current_display->get_key_state (VK_MENU);
+	tracked_shift = current_display->get_key_state (VK_SHIFT);
+
 	// Clear the bar so the remains of previous contents do not show through
 	current_display->with_color (::Wenv::Display::Palette::Default_color);
 	current_display->print_line (own_area, L"", current_display->PF_ERASE_BACKGROUND);
