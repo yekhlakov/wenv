@@ -1,9 +1,11 @@
 #include <algorithm>
 #include <cwchar>
+#include <format>
 #include <map>
 #include <regex>
 #include <Shlwapi.h>
 #include <Windows.h>
+#include <shellapi.h>
 #include "../../maxy/strings.h"
 #include "../../display/Display.h"
 #include "../../display/Palette.h"
@@ -13,6 +15,7 @@
 #include "../../Context.h"
 
 #pragma comment(lib, "shlwapi.lib")
+#pragma comment(lib, "shell32.lib")
 
 namespace Wenv::Apps
 {
@@ -114,6 +117,39 @@ File_list_type * sort_file_list (File_list_type *v, int sort_mode)
 int *get_selected_file_idx (::Wenv::Context * c, const std::wstring &dirname)
 {
 	return c->get<int> ("selected-file-idx " + maxy::strings::wchartoutf8 (dirname), [] () ->int *{ return new int { 0 }; });
+}
+
+// The names of the files selected in the given file list panel, as a list
+// for the file operation commands. Currently the single file highlighted in
+// the panel is returned; an empty list means there is nothing to operate on:
+// there is no selection or the ".." parent entry is selected, which cannot
+// be copied, moved or deleted
+std::vector<std::wstring> get_selected_file_names (::Wenv::Context * c)
+{
+	std::vector<std::wstring> names;
+
+	auto pwd = c->get<std::wstring> ("pwd");
+
+	if (pwd == nullptr)
+	{
+		return names;
+	}
+
+	auto lst = c->get<File_list_type> ("sorted-list");
+	auto idx = get_selected_file_idx (c, *pwd);
+
+	if (lst != nullptr && *idx >= 0 && *idx < (int) lst->size ())
+	{
+		auto name = std::wstring { (*lst)[*idx].cFileName };
+
+		// The parent directory entry cannot be operated on
+		if (name != L"..")
+		{
+			names.push_back (name);
+		}
+	}
+
+	return names;
 }
 
 // Open the given file of the panel working directory in the editor display,
@@ -284,6 +320,12 @@ static bool is_directory (const std::wstring &path)
 {
 	auto attr = GetFileAttributesW (path.c_str ());
 	return attr != INVALID_FILE_ATTRIBUTES && (attr & FILE_ATTRIBUTE_DIRECTORY) != 0;
+}
+
+// Whether the given path exists, as a file or as a directory
+static bool is_existing_path (const std::wstring &path)
+{
+	return GetFileAttributesW (path.c_str ()) != INVALID_FILE_ATTRIBUTES;
 }
 
 // The target path of the copy: an existing directory in the input receives
@@ -614,29 +656,34 @@ static void refresh_file_lists (::Wenv::Display::Display *display)
 }
 
 // The kinds of the pending file operation stored in the modal context (as
-// an int), so the Try again button of the warning modal can restart it
+// an int), so the buttons of the warning modals can continue it
 enum File_operation
 {
 	OP_COPY,
 	OP_MOVE,
-	OP_MKDIR
+	OP_MKDIR,
+	OP_DELETE
+};
+
+// The outcome of running the pending operation: it either has finished
+// (empty error message and no conflict), has stopped on a file that could
+// not be processed (the error message, the position left on it), or has
+// stopped on a file whose target already exists (the conflict flag)
+struct Operation_result
+{
+	std::wstring error_message;
+	bool target_exists = false;
 };
 
 // The command of the Copy/Move button of the file operation modal
 static void operation_modal_file (::Wenv::Display::Display *display);
 
 // Show the "Copy a file" / "Move a file" modal with the given text input
-// prefill. The kind of the pending operation is remembered in the modal
-// context, so the button commands observe it
+// prefill. The pending operation itself (its kind, the files and their
+// working directory) is remembered in the modal context by the command
+// that shows the modal
 static void show_file_operation_modal_with (::Wenv::Display::Display *display, bool is_move, const std::wstring &prefill)
 {
-	auto ctx = display->get_context ("modal");
-
-	if (ctx != nullptr)
-	{
-		ctx->set ("op-kind", new int { is_move ? OP_MOVE : OP_COPY });
-	}
-
 	std::vector<::Wenv::Display::ModalButton> buttons =
 	{
 		{ is_move ? L"Move" : L"Copy", operation_modal_file },
@@ -656,22 +703,66 @@ static void show_file_operation_modal_with (::Wenv::Display::Display *display, b
 	);
 }
 
-// The command of the Try again button of the warning modal
+// The commands of the buttons of the warning and the target-exists modals
 static void retry_operation (::Wenv::Display::Display *display);
+static void skip_operation_file (::Wenv::Display::Display *display);
+static void skip_all_operation_files (::Wenv::Display::Display *display);
+static void overwrite_modal_file (::Wenv::Display::Display *display);
+static void overwrite_all_modal_files (::Wenv::Display::Display *display);
+static void skip_target_modal_file (::Wenv::Display::Display *display);
+static void skip_all_target_modal_files (::Wenv::Display::Display *display);
 
-// Show the warning modal reporting the given file operation error, in the
-// warning color. The Try again button restarts the operation, the Cancel one
-// just closes the modal
-static void show_operation_error_modal (::Wenv::Display::Display *display, int kind, const std::wstring &error_message)
+// Show the warning modal reporting the error of the pending file operation,
+// in the warning color. The Retry button restarts the operation from the
+// file that has failed, the Cancel one just closes the modal, and when there
+// are more files to process after the failed one, the Skip and Skip all
+// buttons are shown too: they abandon the failed file and continue with the
+// next one, the Skip all one leaving every following failing file behind
+// silently as well
+static void show_operation_error_modal (::Wenv::Display::Display *display, const std::wstring &error_message)
 {
+	auto ctx = display->get_context ("modal");
+	auto kind = ctx != nullptr ? ctx->get<int> ("op-kind") : nullptr;
+	auto files = ctx != nullptr ? ctx->get<std::vector<std::wstring>> ("op-files") : nullptr;
+	auto index = ctx != nullptr ? ctx->get<int> ("op-index") : nullptr;
+
 	std::vector<::Wenv::Display::ModalButton> buttons =
 	{
-		{ L"Try again", retry_operation },
-		{ L"Cancel", nullptr }
+		{ L"Retry", retry_operation }
 	};
 
+	// The failed file is not the last one of the operation, so the rest can
+	// still be processed
+	if (files != nullptr && index != nullptr && *index + 1 < (int) files->size ())
+	{
+		buttons.push_back ({ L"Skip", skip_operation_file });
+		buttons.push_back ({ L"Skip all", skip_all_operation_files });
+	}
+
+	buttons.push_back ({ L"Cancel", nullptr });
+
 	// The modal title names the operation that has failed
-	auto title = kind == OP_COPY ? L"Copy failed" : kind == OP_MOVE ? L"Move failed" : L"Creation failed";
+	std::wstring title = L"Operation failed";
+
+	if (kind != nullptr)
+	{
+		if (*kind == OP_COPY)
+		{
+			title = L"Copy failed";
+		}
+		else if (*kind == OP_MOVE)
+		{
+			title = L"Move failed";
+		}
+		else if (*kind == OP_MKDIR)
+		{
+			title = L"Creation failed";
+		}
+		else if (*kind == OP_DELETE)
+		{
+			title = L"Deletion failed";
+		}
+	}
 
 	display->show_modal
 	(
@@ -685,29 +776,206 @@ static void show_operation_error_modal (::Wenv::Display::Display *display, int k
 	);
 }
 
-// Attempt the file operation of the given kind with the given source and
-// destination: on success the panel listings are refreshed and an empty
-// string is returned, on failure the error message to show is
-static std::wstring attempt_file_operation (::Wenv::Display::Display *display, const std::wstring &source, const std::wstring &dest, bool is_move)
+// The info string of the given file for the target-exists modal: its size
+// in bytes and its last-write date in the RFC3339 format
+static std::wstring make_file_info (const std::wstring &path)
 {
-	// A directory cannot be copied or moved into itself
-	if (is_directory (source) && is_copy_into_self (source, dest))
+	WIN32_FILE_ATTRIBUTE_DATA info;
+
+	if (!GetFileAttributesExW (path.c_str (), GetFileExInfoStandard, &info))
 	{
-		return is_move ? L"Cannot move a directory into itself" : L"Cannot copy a directory into itself";
+		return L"unavailable";
+	}
+
+	auto size = ((unsigned long long) info.nFileSizeHigh << 32) | info.nFileSizeLow;
+
+	auto local_time = SYSTEMTIME {};
+	FileTimeToSystemTime (&info.ftLastWriteTime, &local_time);
+
+	return std::format
+	(
+		L"{} bytes, {:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+		size,
+		local_time.wYear, local_time.wMonth, local_time.wDay,
+		local_time.wHour, local_time.wMinute, local_time.wSecond
+	);
+}
+
+// Show the modal asking what to do with the file whose target already
+// exists, in the warning color: it names the file being processed and shows
+// the size and the last-write date of both the source and the target
+static void show_target_exists_modal (::Wenv::Display::Display *display)
+{
+	std::vector<::Wenv::Display::ModalButton> buttons =
+	{
+		{ L"Overwrite", overwrite_modal_file },
+		{ L"Overwrite all", overwrite_all_modal_files },
+		{ L"Skip", skip_target_modal_file },
+		{ L"Skip all", skip_all_target_modal_files },
+		{ L"Cancel", nullptr }
+	};
+
+	auto ctx = display->get_context ("modal");
+	auto kind = ctx != nullptr ? ctx->get<int> ("op-kind") : nullptr;
+	auto files = ctx != nullptr ? ctx->get<std::vector<std::wstring>> ("op-files") : nullptr;
+	auto index = ctx != nullptr ? ctx->get<int> ("op-index") : nullptr;
+	auto pwd = ctx != nullptr ? ctx->get<std::wstring> ("op-pwd") : nullptr;
+	auto dest = ctx != nullptr ? ctx->get<std::wstring> ("op-dest") : nullptr;
+
+	if (files == nullptr || index == nullptr || *index >= (int) files->size () || pwd == nullptr || dest == nullptr)
+	{
+		return;
+	}
+
+	auto name = (*files)[*index];
+	auto source = *pwd + L"\\" + name;
+	auto target = resolve_copy_destination (*dest, name);
+	auto verb = kind != nullptr && *kind == OP_MOVE ? L"moved" : L"copied";
+
+	auto text = L"The target of the file " + name + L" being " + verb + L" already exists:\n"
+		L"Source (" + source + L"): " + make_file_info (source) + L"\n"
+		L"Target (" + target + L"): " + make_file_info (target);
+
+	display->show_modal
+	(
+		"warning",
+		L"Target already exists",
+		text,
+		buttons,
+		::Wenv::Display::Palette::Warning_element_color,
+		::Wenv::Display::Palette::Warning_element_color,
+		::Wenv::Display::Palette::Default_color
+	);
+}
+
+// Perform the operation of the given kind on the single file: the delete
+// needs no target, the copy and the move go to the given (already resolved)
+// one. Returns an empty string on success, the error message otherwise
+static std::wstring perform_file_operation (int kind, const std::wstring &source, const std::wstring &target)
+{
+	if (kind == OP_DELETE)
+	{
+		// The list of the paths to operate on must be double-null-terminated
+		auto paths = source;
+		paths.push_back (L'\0');
+
+		SHFILEOPSTRUCTW operation = {};
+		operation.wFunc = FO_DELETE;
+		operation.pFrom = paths.c_str ();
+		operation.fFlags = FOF_ALLOWUNDO;
+
+		auto result = SHFileOperationW (&operation);
+
+		// A deletion cancelled in the system dialog is not an error
+		if (operation.fAnyOperationsAborted)
+		{
+			return L"";
+		}
+
+		// The operation reports its own error codes, not the system ones
+		return result != 0 ? L"Error " + std::to_wstring ((unsigned) result) : L"";
+	}
+
+	// A directory cannot be copied or moved into itself
+	if (is_directory (source) && is_copy_into_self (source, target))
+	{
+		return kind == OP_MOVE ? L"Cannot move a directory into itself" : L"Cannot copy a directory into itself";
 	}
 
 	DWORD error = ERROR_SUCCESS;
 
-	if (is_move ? !move_recursively (source, dest, error) : !copy_recursively (source, dest, error))
+	if (kind == OP_MOVE ? !move_recursively (source, target, error) : !copy_recursively (source, target, error))
 	{
 		return error != ERROR_SUCCESS ? get_error_message (error) : L"The operation has failed";
 	}
 
-	// The operation may have changed either of the shown directories, so
-	// both panels rescan them
+	return L"";
+}
+
+// Run the pending operation over the files that are still to be processed,
+// starting at the current position. The modes chosen earlier (skipping the
+// errors, overwriting or skipping the existing targets) are read from the
+// modal context. On success (or when there is nothing left) the panel
+// listings are refreshed and the outcome carries neither an error nor a
+// conflict; otherwise the outcome reports either the file that has failed
+// (with the position left on it) or the file whose target already exists
+static Operation_result run_pending_operation (::Wenv::Display::Display *display)
+{
+	auto ctx = display->get_context ("modal");
+
+	if (ctx == nullptr)
+	{
+		return {};
+	}
+
+	auto kind = ctx->get<int> ("op-kind");
+	auto files = ctx->get<std::vector<std::wstring>> ("op-files");
+	auto index = ctx->get<int> ("op-index");
+	auto pwd = ctx->get<std::wstring> ("op-pwd");
+	auto dest = ctx->get<std::wstring> ("op-dest");
+	auto skip_errors = ctx->get<bool> ("op-skip-errors");
+	auto overwrite_existing = ctx->get<bool> ("op-overwrite");
+	auto skip_existing = ctx->get<bool> ("op-skip-existing");
+
+	if (kind == nullptr || files == nullptr || index == nullptr || pwd == nullptr || dest == nullptr)
+	{
+		return {};
+	}
+
+	Operation_result result;
+
+	while (*index < (int) files->size ())
+	{
+		auto source = *pwd + L"\\" + (*files)[*index];
+
+		// Only the copy and the move ask what to do when the target already
+		// exists, unless the mode chosen earlier decides by itself
+		auto target = *kind != OP_DELETE ? resolve_copy_destination (*dest, (*files)[*index]) : std::wstring {};
+
+		if (*kind != OP_DELETE && !overwrite_existing && !skip_existing && is_existing_path (target))
+		{
+			// The position stays on the conflicting file
+			result.target_exists = true;
+			break;
+		}
+
+		result.error_message = perform_file_operation (*kind, source, target);
+
+		if (!result.error_message.empty ())
+		{
+			if (!(skip_errors != nullptr && *skip_errors))
+			{
+				// The position stays on the file that has failed
+				break;
+			}
+
+			// The failed file is abandoned without any notice
+			result.error_message = L"";
+		}
+
+		(*index)++;
+	}
+
+	// The processed files may have changed either of the shown directories,
+	// so both panels rescan them
 	refresh_file_lists (display);
 
-	return L"";
+	return result;
+}
+
+// Report the outcome of the run operation: the target-exists modal for the
+// file whose target already exists, the error modal for the file that has
+// failed, nothing when the operation has finished
+static void report_operation_result (::Wenv::Display::Display *display, const Operation_result &result)
+{
+	if (result.target_exists)
+	{
+		show_target_exists_modal (display);
+	}
+	else if (!result.error_message.empty ())
+	{
+		show_operation_error_modal (display, result.error_message);
+	}
 }
 
 // Attempt the creation of the directory by the given path (the whole missing
@@ -729,8 +997,9 @@ static std::wstring attempt_directory_creation (::Wenv::Display::Display *displa
 	return L"";
 }
 
-// The command of the Try again button of the warning modal: the pending
-// operation is attempted again, a new failure brings the warning modal back up
+// The command of the Retry button of the warning modal: the pending
+// operation is attempted again from the file that has failed, a new failure
+// brings the warning modal back up
 static void retry_operation (::Wenv::Display::Display *display)
 {
 	auto ctx = display->get_context ("modal");
@@ -749,71 +1018,160 @@ static void retry_operation (::Wenv::Display::Display *display)
 		return;
 	}
 
-	std::wstring error_message;
-
 	if (*kind == OP_MKDIR)
 	{
 		auto dest = ctx->get<std::wstring> ("op-dest");
+		std::wstring error_message;
 
-		if (dest == nullptr)
+		if (dest != nullptr)
 		{
-			return;
+			error_message = attempt_directory_creation (display, *dest);
 		}
 
-		error_message = attempt_directory_creation (display, *dest);
+		if (!error_message.empty ())
+		{
+			show_operation_error_modal (display, error_message);
+		}
 	}
 	else
 	{
-		auto source = ctx->get<std::wstring> ("op-source");
-		auto dest = ctx->get<std::wstring> ("op-dest");
+		report_operation_result (display, run_pending_operation (display));
+	}
+}
 
-		if (source == nullptr || dest == nullptr)
+// Continue the pending operation from the file following the failed or
+// conflicting one
+static void continue_pending_operation (::Wenv::Display::Display *display)
+{
+	auto ctx = display->get_context ("modal");
+	auto index = ctx != nullptr ? ctx->get<int> ("op-index") : nullptr;
+
+	if (index == nullptr)
+	{
+		return;
+	}
+
+	// Abandon the current file
+	(*index)++;
+
+	report_operation_result (display, run_pending_operation (display));
+}
+
+// The command of the Skip button of the warning modal: the file that has
+// caused the error is abandoned and the operation continues with the next
+// one
+static void skip_operation_file (::Wenv::Display::Display *display)
+{
+	continue_pending_operation (display);
+}
+
+// The command of the Skip all button of the warning modal: the file that has
+// caused the error is abandoned, and so are all the following ones that
+// fail, with no notice about the failures
+static void skip_all_operation_files (::Wenv::Display::Display *display)
+{
+	auto ctx = display->get_context ("modal");
+
+	if (ctx != nullptr)
+	{
+		// The mode for the following failing files
+		ctx->set ("op-skip-errors", new bool { true });
+	}
+
+	continue_pending_operation (display);
+}
+
+// Resolve the conflict of the current file as the pressed button has chosen
+// and continue the operation: the file is either forced over its existing
+// target or abandoned, and the mode the choice implies for the following
+// conflicting targets is remembered in the modal context
+static void resolve_target_conflict (::Wenv::Display::Display *display, bool overwrite_current, bool overwrite_all, bool skip_all)
+{
+	auto ctx = display->get_context ("modal");
+
+	if (ctx == nullptr)
+	{
+		return;
+	}
+
+	auto kind = ctx->get<int> ("op-kind");
+	auto files = ctx->get<std::vector<std::wstring>> ("op-files");
+	auto index = ctx->get<int> ("op-index");
+	auto pwd = ctx->get<std::wstring> ("op-pwd");
+	auto dest = ctx->get<std::wstring> ("op-dest");
+
+	if (kind == nullptr || files == nullptr || index == nullptr || pwd == nullptr || dest == nullptr || *index >= (int) files->size ())
+	{
+		return;
+	}
+
+	std::wstring error_message;
+
+	if (overwrite_current)
+	{
+		// The current file is forced over its existing target; when the
+		// forced operation fails itself, the position stays on the file
+		auto source = *pwd + L"\\" + (*files)[*index];
+		auto target = resolve_copy_destination (*dest, (*files)[*index]);
+
+		error_message = perform_file_operation (*kind, source, target);
+	}
+
+	if (error_message.empty ())
+	{
+		// The mode for the following conflicting targets
+		if (overwrite_all)
 		{
-			return;
+			ctx->set ("op-overwrite", new bool { true });
+		}
+		else if (skip_all)
+		{
+			ctx->set ("op-skip-existing", new bool { true });
 		}
 
-		error_message = attempt_file_operation (display, *source, *dest, *kind == OP_MOVE);
-	}
+		(*index)++;
 
-	if (!error_message.empty ())
+		report_operation_result (display, run_pending_operation (display));
+	}
+	else
 	{
-		show_operation_error_modal (display, *kind, error_message);
+		// The forced operation may have changed the directories partly
+		refresh_file_lists (display);
+		show_operation_error_modal (display, error_message);
 	}
 }
 
-// Compute the operation source and destination from the state of the given
-// panel and the path typed into the input box; return whether they could be
-// resolved
-static bool resolve_operation_paths (::Wenv::Context *c, const std::wstring &input, std::wstring &source, std::wstring &dest)
+// The command of the Overwrite button of the target-exists modal: the
+// current file is forced over its existing target
+static void overwrite_modal_file (::Wenv::Display::Display *display)
 {
-	auto pwd = c->get<std::wstring> ("pwd");
-
-	if (pwd == nullptr || pwd->empty ())
-	{
-		return false;
-	}
-
-	auto lst = c->get<File_list_type> ("sorted-list");
-	auto idx = get_selected_file_idx (c, *pwd);
-
-	if (lst == nullptr || *idx < 0 || *idx >= (int) lst->size ())
-	{
-		return false;
-	}
-
-	auto filename = std::wstring { (*lst)[*idx].cFileName };
-
-	// A relative input path points into the working directory of the panel
-	auto target = is_absolute_path (input) ? input : *pwd + L"\\" + input;
-
-	source = *pwd + L"\\" + filename;
-	dest = resolve_copy_destination (target, filename);
-
-	return true;
+	resolve_target_conflict (display, true, false, false);
 }
 
-// The command of the Copy/Move button of the file operation modal: the file
-// selected in the active panel is copied or moved to the path typed into the
+// The command of the Overwrite all button of the target-exists modal: the
+// current file is forced over its existing target, and so are the following
+// ones with existing targets, without asking
+static void overwrite_all_modal_files (::Wenv::Display::Display *display)
+{
+	resolve_target_conflict (display, true, true, false);
+}
+
+// The command of the Skip button of the target-exists modal: the current
+// file is abandoned
+static void skip_target_modal_file (::Wenv::Display::Display *display)
+{
+	resolve_target_conflict (display, false, false, false);
+}
+
+// The command of the Skip all button of the target-exists modal: the current
+// file is abandoned, and so are the following ones with existing targets
+static void skip_all_target_modal_files (::Wenv::Display::Display *display)
+{
+	resolve_target_conflict (display, false, false, true);
+}
+
+// The command of the Copy/Move button of the file operation modal: the files
+// of the pending operation are copied or moved to the path typed into the
 // text input box. An empty name does nothing: the modal is shown again
 // unchanged, a failed operation brings the warning modal up instead
 static void operation_modal_file (::Wenv::Display::Display *display)
@@ -836,32 +1194,36 @@ static void operation_modal_file (::Wenv::Display::Display *display)
 		return;
 	}
 
-	std::wstring source, dest;
+	auto pwd = ctx->get<std::wstring> ("op-pwd");
+	auto files = ctx->get<std::vector<std::wstring>> ("op-files");
 
-	if (!resolve_operation_paths (display->focused_context, *input, source, dest))
+	if (pwd == nullptr || files == nullptr || files->empty ())
 	{
-		show_file_operation_modal_with (display, *kind == OP_MOVE, *input);
 		return;
 	}
 
-	// The pending operation is remembered in the modal context, so the Try
-	// again button of the warning modal can restart it
-	ctx->set ("op-source", new std::wstring { source });
-	ctx->set ("op-dest", new std::wstring { dest });
+	// The target path is resolved against the working directory the files
+	// are taken from
+	auto target = is_absolute_path (*input) ? *input : *pwd + L"\\" + *input;
 
-	auto error_message = attempt_file_operation (display, source, dest, *kind == OP_MOVE);
+	// The pending operation is remembered in the modal context, so the
+	// buttons of the warning modals can continue it
+	ctx->set ("op-dest", new std::wstring { target });
+	ctx->set ("op-index", new int { 0 });
 
-	if (!error_message.empty ())
-	{
-		show_operation_error_modal (display, *kind, error_message);
-	}
+	report_operation_result (display, run_pending_operation (display));
 }
 
 // The shared body of the copy and the move modals of the active file list
-// panel: the selection is read from the context of the panel, so the call
-// may come either from the func menu or from the file list itself
-static void show_file_operation_modal (::Wenv::Display::Display *display, ::Wenv::Context *c, bool is_move)
+// panel: the pending operation (the files with their working directory) is
+// remembered in the modal context, so the commands of its buttons can run it
+static void show_file_operation_modal (::Wenv::Display::Display *display, ::Wenv::Context *c, bool is_move, const std::vector<std::wstring> &files)
 {
+	if (files.empty ())
+	{
+		return;
+	}
+
 	auto pwd = c->get<std::wstring> ("pwd");
 
 	if (pwd == nullptr)
@@ -869,19 +1231,18 @@ static void show_file_operation_modal (::Wenv::Display::Display *display, ::Wenv
 		return;
 	}
 
-	auto lst = c->get<File_list_type> ("sorted-list");
-	auto idx = get_selected_file_idx (c, *pwd);
+	auto ctx = display->get_context ("modal");
 
-	if (lst == nullptr || *idx < 0 || *idx >= (int) lst->size ())
+	if (ctx != nullptr)
 	{
-		return;
-	}
-
-	// The parent directory entry cannot be copied or moved, so the modal
-	// does not show up at all when it is selected
-	if (std::wstring { (*lst)[*idx].cFileName } == L"..")
-	{
-		return;
+		ctx->set ("op-kind", new int { is_move ? OP_MOVE : OP_COPY });
+		ctx->set ("op-pwd", new std::wstring { *pwd });
+		ctx->set ("op-files", new std::vector<std::wstring> { files });
+		ctx->set ("op-dest", new std::wstring {});
+		ctx->set ("op-index", new int { 0 });
+		ctx->set ("op-skip-errors", new bool { false });
+		ctx->set ("op-overwrite", new bool { false });
+		ctx->set ("op-skip-existing", new bool { false });
 	}
 
 	// The input is prefilled with the directory the opposite panel shows
@@ -896,14 +1257,14 @@ static void show_file_operation_modal (::Wenv::Display::Display *display, ::Wenv
 	show_file_operation_modal_with (display, is_move, prefill);
 }
 
-void show_copy_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c)
+void show_copy_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c, const std::vector<std::wstring> &files)
 {
-	show_file_operation_modal (display, c, false);
+	show_file_operation_modal (display, c, false, files);
 }
 
-void show_move_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c)
+void show_move_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c, const std::vector<std::wstring> &files)
 {
-	show_file_operation_modal (display, c, true);
+	show_file_operation_modal (display, c, true, files);
 }
 
 // The command of the Create button of the mkdir modal
@@ -920,13 +1281,21 @@ void show_mkdir_modal (::Wenv::Display::Display *display)
 		{ L"Cancel", nullptr }
 	};
 
-	// The kind of the pending operation is remembered in the modal context,
-	// so the Try again button of the warning modal observes it
+	// The pending operation is remembered in the modal context, so the
+	// buttons of the warning modals observe it; it operates on no files, so
+	// the whole state is reset to avoid the leftovers of a previous one
 	auto ctx = display->get_context ("modal");
 
 	if (ctx != nullptr)
 	{
 		ctx->set ("op-kind", new int { OP_MKDIR });
+		ctx->set ("op-pwd", new std::wstring {});
+		ctx->set ("op-dest", new std::wstring {});
+		ctx->set ("op-files", new std::vector<std::wstring> {});
+		ctx->set ("op-index", new int { 0 });
+		ctx->set ("op-skip-errors", new bool { false });
+		ctx->set ("op-overwrite", new bool { false });
+		ctx->set ("op-skip-existing", new bool { false });
 	}
 
 	display->show_modal
@@ -973,16 +1342,135 @@ static void mkdir_modal_create (::Wenv::Display::Display *display)
 	// A relative path points into the working directory of the panel
 	auto path = is_absolute_path (*input) ? *input : *pwd + L"\\" + *input;
 
-	// The pending creation is remembered in the modal context, so the Try
-	// again button of the warning modal can restart it
+	// The pending creation is remembered in the modal context, so the Retry
+	// button of the warning modal can restart it
 	ctx->set ("op-dest", new std::wstring { path });
 
 	auto error_message = attempt_directory_creation (display, path);
 
 	if (!error_message.empty ())
 	{
-		show_operation_error_modal (display, OP_MKDIR, error_message);
+		show_operation_error_modal (display, error_message);
 	}
+}
+
+// Whether the file of the given name is a directory in the listing of the
+// given panel
+static bool is_listed_directory (::Wenv::Context *c, const std::wstring &name)
+{
+	auto lst = c->get<File_list_type> ("sorted-list");
+
+	if (lst != nullptr)
+	{
+		for (auto &fd : *lst)
+		{
+			if (std::wstring { fd.cFileName } == name)
+			{
+				return (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+			}
+		}
+	}
+
+	return false;
+}
+
+// The question text of the delete confirmation: the files are named one by
+// one (a directory is named as such), at most three of them are listed and
+// the rest are counted; a single directory additionally warns that its
+// contents are deleted along with it
+static std::wstring make_delete_question (::Wenv::Context *c, const std::vector<std::wstring> &files)
+{
+	// The items of the question: the first three files and the count of the
+	// rest when there are more
+	std::vector<std::wstring> items;
+	auto named = (std::min) (files.size (), (size_t) 3);
+
+	for (size_t i = 0; i < named; i++)
+	{
+		items.push_back (is_listed_directory (c, files[i])
+			? L"directory \"" + files[i] + L"\""
+			: L"file " + files[i]);
+	}
+
+	if (files.size () > 3)
+	{
+		items.push_back (std::to_wstring (files.size () - 3) + L" more files");
+	}
+
+	// A single directory keeps the warning about its contents
+	if (files.size () == 1 && is_listed_directory (c, files[0]))
+	{
+		items[0] += L" and all its contents";
+	}
+
+	auto question = std::wstring { L"Are you sure you want to delete " };
+
+	for (size_t i = 0; i < items.size (); i++)
+	{
+		if (i > 0)
+		{
+			question += i + 1 < items.size () ? L", " : L" and ";
+		}
+
+		question += items[i];
+	}
+
+	return question + L"?";
+}
+
+// The command of the Yes button of the delete confirmation modal: the files
+// selected when the modal was shown are deleted into the Recycle Bin
+static void delete_modal_yes (::Wenv::Display::Display *display)
+{
+	report_operation_result (display, run_pending_operation (display));
+}
+
+void show_delete_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c, const std::vector<std::wstring> &files)
+{
+	if (files.empty ())
+	{
+		return;
+	}
+
+	auto pwd = c->get<std::wstring> ("pwd");
+
+	if (pwd == nullptr)
+	{
+		return;
+	}
+
+	// The pending deletion is remembered in the modal context, so the
+	// buttons of the modals can run and continue it
+	auto ctx = display->get_context ("modal");
+
+	if (ctx != nullptr)
+	{
+		ctx->set ("op-kind", new int { OP_DELETE });
+		ctx->set ("op-pwd", new std::wstring { *pwd });
+		ctx->set ("op-dest", new std::wstring {});
+		ctx->set ("op-files", new std::vector<std::wstring> { files });
+		ctx->set ("op-index", new int { 0 });
+		ctx->set ("op-skip-errors", new bool { false });
+		ctx->set ("op-overwrite", new bool { false });
+		ctx->set ("op-skip-existing", new bool { false });
+	}
+
+	std::vector<::Wenv::Display::ModalButton> buttons =
+	{
+		{ L"Yes", delete_modal_yes },
+		{ L"No", nullptr }
+	};
+
+	display->show_modal
+	(
+		"warning",
+		files.size () > 1 ? L"Delete files" : L"Delete a file",
+		make_delete_question (c, files),
+		buttons,
+		::Wenv::Display::Palette::Warning_element_color,
+		::Wenv::Display::Palette::Warning_element_color,
+		::Wenv::Display::Palette::Default_color
+	);
 }
 
 bool is_executable_file (const std::wstring &filename)

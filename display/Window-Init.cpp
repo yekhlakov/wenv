@@ -112,8 +112,9 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_editor_commands
 // the common F10 "Exit" it has the F3 "View" and F4 "Edit" commands, which show
 // the file selected in the panel in the editor - either closed for editing or
 // open for it, which its status bar shows as a lock, and the F5 "Copy", F6
-// "Move" and F7 "Mkdir" commands, which show the modals asking where to copy
-// or move the selected file to, or what directory to create
+// "Move", F7 "Mkdir" and F8 "Delete" commands, which show the modals asking
+// where to copy or move the selected file to, what directory to create, or
+// whether to delete the selected file
 std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_list_commands ()
 {
 	auto commands = make_func_menu_default_commands ();
@@ -141,7 +142,7 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_list_commands (
 
 		[] (::Wenv::Display::Display *display, ::Wenv::Context *context)
 		{
-			::Wenv::Apps::show_copy_file_modal (display, context);
+			::Wenv::Apps::show_copy_file_modal (display, context, ::Wenv::Apps::get_selected_file_names (context));
 		}
 	};
 
@@ -150,7 +151,7 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_list_commands (
 
 		[] (::Wenv::Display::Display *display, ::Wenv::Context *context)
 		{
-			::Wenv::Apps::show_move_file_modal (display, context);
+			::Wenv::Apps::show_move_file_modal (display, context, ::Wenv::Apps::get_selected_file_names (context));
 		}
 	};
 
@@ -160,6 +161,15 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_list_commands (
 		[] (::Wenv::Display::Display *display, ::Wenv::Context *context)
 		{
 			::Wenv::Apps::show_mkdir_modal (display);
+		}
+	};
+
+	(*commands)[7] = {
+		L"Delete",
+
+		[] (::Wenv::Display::Display *display, ::Wenv::Context *context)
+		{
+			::Wenv::Apps::show_delete_file_modal (display, context, ::Wenv::Apps::get_selected_file_names (context));
 		}
 	};
 

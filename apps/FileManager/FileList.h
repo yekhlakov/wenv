@@ -14,6 +14,13 @@ using File_list_type = std::vector<WIN32_FIND_DATAW>;
 // selection is remembered per directory
 int *get_selected_file_idx (::Wenv::Context *c, const std::wstring &dirname);
 
+// The names of the files selected in the panel of the given context, as a
+// list for the file operation commands. Currently the single file
+// highlighted in the panel is returned; an empty list means there is
+// nothing to operate on: there is no selection or the ".." parent entry is
+// selected, which cannot be copied, moved or deleted
+std::vector<std::wstring> get_selected_file_names (::Wenv::Context *c);
+
 // Show the file selected in the given file list panel in the file editor
 // display, either for viewing or for editing. A selected directory is left
 // alone, since descending into it is the business of the file list itself
@@ -28,19 +35,23 @@ void show_open_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c
 
 // Show the "Copy a file" modal of the active file list panel. The text input
 // box of the modal is prefilled with the working directory of the opposite
-// panel; the Copy button copies the file highlighted in the panel to the
-// typed path: an existing directory receives the file under its own name,
-// the missing intermediate directories are created on the way, a highlighted
-// directory is copied along with all its contents. A failed copy shows the
-// warning modal with the error message, offering to try again or to cancel.
-// The modal does not show up when the ".." entry is selected, since it cannot
-// be copied
-void show_copy_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c);
+// panel; the Copy button copies every file of the given list to the typed
+// path: an existing directory receives a file under its own name, the
+// missing intermediate directories are created on the way, a directory is
+// copied along with all its contents. A file whose target already exists
+// brings the modal up that shows the info of both the source and the target
+// and offers to overwrite the file (or all such files), to skip it (or all
+// such) or to cancel; a file that cannot be copied brings the warning modal
+// up with the error message, offering to retry it, to skip the failing file
+// (or all the failing ones, when the Skip all is pressed) and go on with the
+// rest, or to cancel the whole operation. The modal does not show up when
+// the list is empty
+void show_copy_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c, const std::vector<std::wstring> &files);
 
 // Show the "Move a file" modal of the active file list panel: it behaves
-// exactly as the copy one, but the highlighted file is moved (renamed) to
-// the typed path instead of being copied
-void show_move_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c);
+// exactly as the copy one, but the files of the given list are moved
+// (renamed) to the typed path instead of being copied
+void show_move_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c, const std::vector<std::wstring> &files);
 
 // Show the "Create a directory" modal of the active file list panel with an
 // empty text input; the Create button creates the directory by the typed
@@ -48,6 +59,18 @@ void show_move_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c
 // panel, a failed creation shows the warning modal with the error message,
 // offering to try again or to cancel
 void show_mkdir_modal (::Wenv::Display::Display *display);
+
+// Show the confirmation modal of the active file list panel, in the warning
+// color: it asks whether to delete the given files, naming them (at most
+// three by name, the rest are counted; a directory is named as such, and a
+// single one warns that its contents are deleted along with it). The Yes
+// button deletes the files with the SHFileOperation, moving them into the
+// Recycle Bin (directories are deleted along with all their contents), a
+// failed deletion shows the warning modal with the error message, offering
+// to retry, to skip the failing file (or all the failing ones, when the
+// Skip all is pressed) and go on with the rest, or to cancel. The
+// modal does not show up when the list is empty
+void show_delete_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c, const std::vector<std::wstring> &files);
 
 class FileList : public App
 {
