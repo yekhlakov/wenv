@@ -922,6 +922,11 @@ static Operation_result run_pending_operation (::Wenv::Display::Display *display
 		return {};
 	}
 
+	// The mode flags are optional: a missing one means it is not set
+	auto is_skip_errors = skip_errors != nullptr && *skip_errors;
+	auto is_overwrite_existing = overwrite_existing != nullptr && *overwrite_existing;
+	auto is_skip_existing = skip_existing != nullptr && *skip_existing;
+
 	Operation_result result;
 
 	while (*index < (int) files->size ())
@@ -932,7 +937,7 @@ static Operation_result run_pending_operation (::Wenv::Display::Display *display
 		// exists, unless the mode chosen earlier decides by itself
 		auto target = *kind != OP_DELETE ? resolve_copy_destination (*dest, (*files)[*index]) : std::wstring {};
 
-		if (*kind != OP_DELETE && !overwrite_existing && !skip_existing && is_existing_path (target))
+		if (*kind != OP_DELETE && !is_overwrite_existing && !is_skip_existing && is_existing_path (target))
 		{
 			// The position stays on the conflicting file
 			result.target_exists = true;
@@ -943,7 +948,7 @@ static Operation_result run_pending_operation (::Wenv::Display::Display *display
 
 		if (!result.error_message.empty ())
 		{
-			if (!(skip_errors != nullptr && *skip_errors))
+			if (!is_skip_errors)
 			{
 				// The position stays on the file that has failed
 				break;
