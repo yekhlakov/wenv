@@ -10,15 +10,26 @@ namespace Wenv::Apps
 // The file entries of a directory scan (a sorted list of WIN32_FIND_DATAW)
 using File_list_type = std::vector<WIN32_FIND_DATAW>;
 
+// The totals of the selected entries: the counts of the regular files and
+// of the directories and the total size of the regular files. Maintained
+// along with the list of the selected full paths (the "selected-files"
+// parameter of the panel context) as the files are selected and deselected
+struct Selected_stats
+{
+	int files = 0;
+	int dirs = 0;
+	unsigned long long bytes = 0;
+};
+
 // The index of the file selected in the panel of the given context; the
 // selection is remembered per directory
 int *get_selected_file_idx (::Wenv::Context *c, const std::wstring &dirname);
 
-// The names of the files selected in the panel of the given context, as a
-// list for the file operation commands. Currently the single file
-// highlighted in the panel is returned; an empty list means there is
-// nothing to operate on: there is no selection or the ".." parent entry is
-// selected, which cannot be copied, moved or deleted
+// The names of the files the operation commands of the panel of the given
+// context operate on: the entries of the explicit selection when the panel
+// holds one, the single file highlighted in the panel otherwise. An empty
+// list means there is nothing to operate on: there is no selection and the
+// ".." parent entry is highlighted, which cannot be copied, moved or deleted
 std::vector<std::wstring> get_selected_file_names (::Wenv::Context *c);
 
 // Show the file selected in the given file list panel in the file editor
@@ -80,6 +91,7 @@ class FileList : public App
 	int * get_list_offset ();
 	std::string * get_focused_path ();
 	std::vector<App *> * get_app_group ();
+	std::vector<std::wstring> * get_selected_files ();
 	File_list_type * get_file_list ();
 	File_list_type * get_sorted_file_list ();
 

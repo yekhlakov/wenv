@@ -22,6 +22,10 @@ void editor_toggle_editing (::Wenv::Display::Display *display, ::Wenv::Context *
 // the unsaved changes when there are any
 void editor_exit (::Wenv::Display::Display *display, ::Wenv::Context *context);
 
+// The F2 command of the editor: save the file keeping the undo stack; does
+// nothing outside the editing mode
+void editor_save (::Wenv::Display::Display *display, ::Wenv::Context *context);
+
 // The kind of the undo operation: removing a text range (reverting an
 // insertion) or inserting text back (reverting a removal)
 enum class UndoType { remove, insert };
@@ -61,10 +65,11 @@ class FileEditor : public App
 	bool * get_is_editing ();
 
 	// The unsaved changes flag shared with the status bar: true while the
-	// undo stack of the editing session is not empty
+	// undo stack size differs from the size the file was saved with
 	bool * get_pending_changes ();
 
-	// Update the unsaved changes flag according to the undo stack state
+	// Update the unsaved changes flag according to the saved state marker
+	// and the current undo stack size
 	void update_pending_changes ();
 
 	// The full path of the currently edited file; empty when no file is
@@ -96,6 +101,17 @@ class FileEditor : public App
 	// revert the inputs made so far, the most recent last
 	std::vector<UndoOperation> undo_stack;
 
+	// The undo stack size at the time the file was saved last: the file
+	// counts as edited while the current stack size differs from it. An
+	// edit made after the stack has been undone below the saved state sets
+	// the marker to -1, since that state cannot be reached by undoing
+	// anymore; a freshly opened file starts unedited
+	int saved_undo_stack_size = 0;
+
+	// Record the undo operation of a single edit, keeping the saved state
+	// marker up to date
+	void record_undo (UndoOperation op);
+
 	// Apply the last undo operation and drop it; returns false when the
 	// stack is empty
 	bool undo_last (int *cursor_line, int *cursor_pos);
@@ -107,15 +123,17 @@ class FileEditor : public App
 public:
 	FileEditor (const std::wstring &n) : App { n } {}
 
-	// Drop the undo operations of the editing session
-	void clear_undo () { undo_stack.clear (); update_pending_changes (); }
+	// Drop the undo operations of the editing session, which also resets
+	// the saved state marker: a fresh session starts over an unedited file
+	void clear_undo () { undo_stack.clear (); saved_undo_stack_size = 0; update_pending_changes (); }
 
 	// Discard all the changes of the session by applying the whole undo
 	// stack, emptying it in the process
 	void discard_changes ();
 
-	// The placeholder of saving the changes: the actual saving is not
-	// implemented yet
+	// Save the current content of the file to disk; the undo stack is kept
+	// so the session continues, and the file counts as edited again as
+	// soon as anything is edited or undone
 	void save_changes ();
 
 	// Show the unsaved changes guard modal that proceeds with the given

@@ -75,6 +75,9 @@
     <ClInclude Include="apps\FileManager\FileListHeader.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
+    <ClInclude Include="apps\FileManager\FileListSelectedFiles.h">
+      <Filter>Файлы заголовков</Filter>
+    </ClInclude>
     <ClInclude Include="apps\FileEditor\FileEditorStatusBar.h">
       <Filter>Файлы заголовков</Filter>
     </ClInclude>
@@ -138,6 +141,9 @@
       <Filter>Исходные файлы</Filter>
     </ClCompile>
     <ClCompile Include="apps\FileManager\FileListHeader.cpp">
+      <Filter>Исходные файлы</Filter>
+    </ClCompile>
+    <ClCompile Include="apps\FileManager\FileListSelectedFiles.cpp">
       <Filter>Исходные файлы</Filter>
     </ClCompile>
     <ClCompile Include="apps\App.cpp">

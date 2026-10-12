@@ -7,6 +7,7 @@
 #include "../../display/Palette.h"
 #include "../../maxy/strings.h"
 #include "../../Context.h"
+#include "../FuncMenu/FuncMenu.h"
 #include "File.h"
 #include "FileEditor.h"
 
@@ -171,6 +172,23 @@ void editor_exit (::Wenv::Display::Display *display, ::Wenv::Context *context)
 	display->window->close_current_display ();
 }
 
+// The F2 command of the editor: save the current content of the file
+// without touching the undo stack; only the editing mode saves
+void editor_save (::Wenv::Display::Display *display, ::Wenv::Context *context)
+{
+	if (context == nullptr || !*context->get<bool> ("is_editing", [] () { return new bool { false }; }))
+	{
+		return;
+	}
+
+	auto editor = get_editor_app (display);
+
+	if (editor != nullptr)
+	{
+		editor->save_changes ();
+	}
+}
+
 void FileEditor::draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area)
 {
 	App::draw (display, path, client_area);
@@ -233,6 +251,17 @@ void FileEditor::redraw (const std::string &path)
 	auto is_editing = get_is_editing ();
 	auto cursor_line = get_file_cursor_line (full_path);
 	auto cursor_pos = get_file_cursor_pos (full_path);
+
+	// The func menu commands follow the editing mode: the F2 "Save" command
+	// is shown only while editing (a viewed file has nothing to save), and
+	// the F6 command offers the mode it would switch to
+	auto commands = current_context->get<std::vector<FuncMenuCommand>> ("func_menu.default");
+
+	if (commands != nullptr)
+	{
+		(*commands)[1].name = *is_editing ? L"Save" : L"";
+		(*commands)[5].name = *is_editing ? L"View" : L"Edit";
+	}
 
 	// The display position of the cursor within its line. The cursor is kept
 	// in the raw (before the tab expansion) coordinates of the file, and a tab
@@ -529,12 +558,12 @@ bool FileEditor::handle_keydown (unsigned int key, int modifiers)
 	// The modifier flag of the control key (see Window::current_mods)
 	constexpr int ctrl = 1;
 
-	// The Escape key is owned by the editor: in the editing mode it is
-	// ignored so the unsaved changes cannot be lost, in the viewing mode
-	// the editor is closed (without saving)
+	// The Escape key is owned by the editor: it closes the editor unless
+	// it is editing a file with unsaved changes, which cannot be lost by
+	// an accidental keypress
 	if (key == VK_ESCAPE)
 	{
-		if (!*is_editing)
+		if (!*is_editing || !*get_pending_changes ())
 		{
 			editor_exit (current_display, current_context);
 		}
@@ -706,6 +735,19 @@ static std::list<FileLine>::iterator line_iterator (File *file, int line)
 	return it;
 }
 
+void FileEditor::record_undo (UndoOperation op)
+{
+	// An edit made while the stack is below the saved state makes that
+	// state unreachable by undoing: the marker goes to -1, so the file
+	// stays edited until it is saved again
+	if ((int) undo_stack.size () < saved_undo_stack_size)
+	{
+		saved_undo_stack_size = -1;
+	}
+
+	undo_stack.push_back (op);
+}
+
 // True when the byte is a utf-8 continuation byte (10xxxxxx)
 static bool is_utf8_continuation (char byte)
 {
@@ -829,7 +871,7 @@ bool FileEditor::insert_typed_char (unsigned int key, int modifiers, int *cursor
 
 	// The undo operation removes everything the input has added: the line
 	// padding, the appended empty lines and the characters themselves
-	undo_stack.push_back
+	record_undo
 	({
 		.type = UndoType::remove,
 		.start_line = start_line,
@@ -881,7 +923,7 @@ bool FileEditor::backspace_at_cursor (int *cursor_line, int *cursor_pos)
 		*cursor_pos = prev_length;
 
 		// The undo operation inserts the removed newline back
-		undo_stack.push_back
+		record_undo
 		({
 			.type = UndoType::insert,
 			.line = *cursor_line,
@@ -906,7 +948,7 @@ bool FileEditor::backspace_at_cursor (int *cursor_line, int *cursor_pos)
 	*cursor_pos = start;
 
 	// The undo operation inserts the removed character back
-	undo_stack.push_back
+	record_undo
 	({
 		.type = UndoType::insert,
 		.line = *cursor_line,
@@ -940,7 +982,7 @@ bool FileEditor::delete_at_cursor (int *cursor_line, int *cursor_pos)
 		*cursor_pos = pos;
 
 		// The undo operation inserts the removed character back
-		undo_stack.push_back
+		record_undo
 		({
 			.type = UndoType::insert,
 			.line = *cursor_line,
@@ -969,7 +1011,7 @@ bool FileEditor::delete_at_cursor (int *cursor_line, int *cursor_pos)
 		*cursor_pos = pos;
 
 		// The undo operation inserts the removed newline back
-		undo_stack.push_back
+		record_undo
 		({
 			.type = UndoType::insert,
 			.line = *cursor_line,
@@ -997,7 +1039,7 @@ bool FileEditor::delete_at_cursor (int *cursor_line, int *cursor_pos)
 		*cursor_pos = prev_length;
 
 		// The undo operation inserts the removed newline back
-		undo_stack.push_back
+		record_undo
 		({
 			.type = UndoType::insert,
 			.line = *cursor_line,
@@ -1166,6 +1208,11 @@ void FileEditor::save_changes ()
 		// created during the editing are saved with the actual newline of
 		// the file while the pre-existing ones keep theirs
 		file->save ();
+
+		// The saved content matches the current undo stack state: any
+		// further edit or undo application makes the file edited again
+		saved_undo_stack_size = (int) undo_stack.size ();
+		update_pending_changes ();
 	}
 }
 
@@ -1318,7 +1365,9 @@ void FileEditor::update_pending_changes ()
 		return;
 	}
 
-	*get_pending_changes () = !undo_stack.empty ();
+	// The file counts as edited while the undo stack size differs from the
+	// size it had when the file was saved last
+	*get_pending_changes () = (int) undo_stack.size () != saved_undo_stack_size;
 }
 
 int * FileEditor::get_file_cursor_line (const std::wstring &full_path)

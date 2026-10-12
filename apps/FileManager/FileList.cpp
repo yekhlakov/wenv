@@ -119,11 +119,93 @@ int *get_selected_file_idx (::Wenv::Context * c, const std::wstring &dirname)
 	return c->get<int> ("selected-file-idx " + maxy::strings::wchartoutf8 (dirname), [] () ->int *{ return new int { 0 }; });
 }
 
-// The names of the files selected in the given file list panel, as a list
-// for the file operation commands. Currently the single file highlighted in
-// the panel is returned; an empty list means there is nothing to operate on:
-// there is no selection or the ".." parent entry is selected, which cannot
-// be copied, moved or deleted
+// The full path of the file of the given name in the given working directory
+static std::wstring make_full_path (const std::wstring &pwd, const std::wstring &name)
+{
+	if (!pwd.empty () && pwd.back () == L'\\')
+	{
+		return pwd + name;
+	}
+
+	return pwd + L"\\" + name;
+}
+
+// Add the entry (its kind and size) to the selection totals of the given
+// context, or take it out of them when is_added is false
+static void apply_stats (::Wenv::Context *c, bool is_dir, unsigned long long size, bool is_added)
+{
+	auto stats = c->get<Selected_stats> ("selected-stats", [] () { return new Selected_stats {}; });
+
+	if (is_dir)
+	{
+		if (is_added)
+		{
+			stats->dirs++;
+		}
+		else
+		{
+			stats->dirs--;
+		}
+	}
+	else
+	{
+		if (is_added)
+		{
+			stats->files++;
+			stats->bytes += size;
+		}
+		else
+		{
+			stats->files--;
+			stats->bytes -= size;
+		}
+	}
+}
+
+// Remove the given entry from the selection of the given panel context and
+// take it out of the totals. The attributes are the ones taken before the
+// entry was processed (a null means they are unknown, so only the list is
+// updated); an entry that is not in the selection is left alone
+static void remove_from_selection (::Wenv::Context *c, const std::wstring &full_name, const WIN32_FILE_ATTRIBUTE_DATA *info)
+{
+	if (c == nullptr)
+	{
+		return;
+	}
+
+	auto selected = c->get<std::vector<std::wstring>> ("selected-files");
+
+	if (selected == nullptr)
+	{
+		return;
+	}
+
+	auto pos = std::find (selected->begin (), selected->end (), full_name);
+
+	if (pos == selected->end ())
+	{
+		return;
+	}
+
+	selected->erase (pos);
+
+	if (info != nullptr)
+	{
+		apply_stats
+		(
+			c,
+			(info->dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0,
+			((unsigned long long) info->nFileSizeHigh << 32) | info->nFileSizeLow,
+			false
+		);
+	}
+}
+
+// The names of the files the operation commands of the given file list panel
+// operate on: the entries of the explicit selection when the panel holds
+// one, the single file highlighted in the panel otherwise. An empty list
+// means there is nothing to operate on: there is no selection and the ".."
+// parent entry is highlighted, which cannot be copied, moved or deleted
 std::vector<std::wstring> get_selected_file_names (::Wenv::Context * c)
 {
 	std::vector<std::wstring> names;
@@ -132,6 +214,19 @@ std::vector<std::wstring> get_selected_file_names (::Wenv::Context * c)
 
 	if (pwd == nullptr)
 	{
+		return names;
+	}
+
+	// The explicit selection takes precedence over the highlighted entry
+	auto selected = c->get<std::vector<std::wstring>> ("selected-files");
+
+	if (selected != nullptr && !selected->empty ())
+	{
+		for (auto &path : *selected)
+		{
+			names.push_back (path.substr (path.find_last_of (L"\\/") + 1));
+		}
+
 		return names;
 	}
 
@@ -944,6 +1039,11 @@ static Operation_result run_pending_operation (::Wenv::Display::Display *display
 			break;
 		}
 
+		// The attributes of the entry are taken before the operation, which
+		// may remove the file; they feed the selection bookkeeping
+		WIN32_FILE_ATTRIBUTE_DATA info {};
+		auto has_info = GetFileAttributesExW (source.c_str (), GetFileExInfoStandard, &info) != 0;
+
 		result.error_message = perform_file_operation (*kind, source, target);
 
 		if (!result.error_message.empty ())
@@ -956,6 +1056,17 @@ static Operation_result run_pending_operation (::Wenv::Display::Display *display
 
 			// The failed file is abandoned without any notice
 			result.error_message = L"";
+		}
+		else
+		{
+			// The processed file leaves the selection of the panel, so an
+			// aborted command leaves only the unprocessed ones selected
+			remove_from_selection
+			(
+				display->focused_context,
+				make_full_path (*pwd, (*files)[*index]),
+				has_info ? &info : nullptr
+			);
 		}
 
 		(*index)++;
@@ -1111,6 +1222,8 @@ static void resolve_target_conflict (::Wenv::Display::Display *display, bool ove
 	}
 
 	std::wstring error_message;
+	WIN32_FILE_ATTRIBUTE_DATA info {};
+	auto has_info = false;
 
 	if (overwrite_current)
 	{
@@ -1119,11 +1232,26 @@ static void resolve_target_conflict (::Wenv::Display::Display *display, bool ove
 		auto source = *pwd + L"\\" + (*files)[*index];
 		auto target = resolve_copy_destination (*dest, (*files)[*index]);
 
+		// The attributes for the selection bookkeeping are taken before the
+		// operation, which may remove the file
+		has_info = GetFileAttributesExW (source.c_str (), GetFileExInfoStandard, &info) != 0;
 		error_message = perform_file_operation (*kind, source, target);
 	}
 
 	if (error_message.empty ())
 	{
+		// The forced file has been processed, so it leaves the selection of
+		// the panel along with the rest as they get processed
+		if (overwrite_current)
+		{
+			remove_from_selection
+			(
+				display->focused_context,
+				make_full_path (*pwd, (*files)[*index]),
+				has_info ? &info : nullptr
+			);
+		}
+
 		// The mode for the following conflicting targets
 		if (overwrite_all)
 		{
@@ -1527,6 +1655,7 @@ void FileList::redraw(const std::string &path)
 	auto selected_file_idx = get_selected_file_idx (current_context, *s);
 	auto current_client_area = get_client_area (path);
 	auto list_offset = get_list_offset ();
+	auto selected_files = get_selected_files ();
 
 	*selected_file_idx = min ((int) sorted_lst->size () - 1, *selected_file_idx);
 	*selected_file_idx = max (0, *selected_file_idx);
@@ -1602,8 +1731,19 @@ void FileList::redraw(const std::string &path)
 		}
 		else if (is_executable_file (display_name))
 		{
-			color = ::Wenv::Display::Palette::Active_element_color;
+			// The quote color keeps the executables apart from the
+			// selected files, which show in the active color
+			color = ::Wenv::Display::Palette::Quote_element_color;
 			display_name += L"*";
+		}
+
+		// A file present in the selection is shown in the active color
+		// whatever its kind or attributes are
+		auto full_name = make_full_path (*s, std::wstring { fd.cFileName });
+
+		if (std::find (selected_files->begin (), selected_files->end (), full_name) != selected_files->end ())
+		{
+			color = ::Wenv::Display::Palette::Active_element_color;
 		}
 
 		if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
@@ -1805,11 +1945,54 @@ bool FileList::handle_keydown (unsigned int key, int modifiers)
 			}
 			current_context->erase ("list");
 			current_context->erase ("sorted-list");
+
+			// The selection belongs to the directory being left
+			current_context->erase ("selected-files");
+			current_context->erase ("selected-stats");
 		}
 		else
 		{
 			return false;
 		}
+	}
+	else if (key == VK_INSERT)
+	{
+		// Toggle the selection of the highlighted entry; the parent
+		// directory cannot be selected
+		if (*idx >= 0 && *idx < (int) lst->size ())
+		{
+			auto entry_name = std::wstring { (*lst)[*idx].cFileName };
+
+			if (entry_name != L"..")
+			{
+				auto selected = get_selected_files ();
+				auto &fd = (*lst)[*idx];
+				auto size = ((unsigned long long) fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
+				auto is_dir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+
+				auto full_name = make_full_path (*pwd, entry_name);
+				auto pos = std::find (selected->begin (), selected->end (), full_name);
+
+				if (pos != selected->end ())
+				{
+					// The entry leaves the selection along with its share
+					// of the totals
+					selected->erase (pos);
+					apply_stats (current_context, is_dir, size, false);
+				}
+				else
+				{
+					// The entry joins the selection along with its share
+					// of the totals
+					selected->push_back (full_name);
+					apply_stats (current_context, is_dir, size, true);
+				}
+			}
+		}
+
+		// Step to the next entry, so the repeated presses select the
+		// sequential files
+		(*idx)++;
 	}
 	else if (key == VK_TAB)
 	{
@@ -1879,6 +2062,13 @@ std::vector<App *> * FileList::get_app_group ()
 {
 	// No default: a missing group simply means there are no apps to redraw
 	return current_context->get<std::vector<App *>> ("app-group");
+}
+
+std::vector<std::wstring> * FileList::get_selected_files ()
+{
+	// Default: no files are selected; the paths are full ones, so the
+	// selection is dropped by erasing the parameter on a directory change
+	return current_context->get<std::vector<std::wstring>> ("selected-files", [] () { return new std::vector<std::wstring> {}; });
 }
 
 File_list_type * FileList::get_file_list ()

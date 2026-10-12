@@ -10,6 +10,7 @@
 #include "../apps/FileManager/FileList.h"
 #include "../apps/FileManager/FileListHeader.h"
 #include "../apps/FileManager/FileInfoShort.h"
+#include "../apps/FileManager/FileListSelectedFiles.h"
 
 #include "../apps/FileEditor/File.h"
 #include "../apps/FileEditor/FileEditor.h"
@@ -68,15 +69,26 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_default_commands ()
 	return commands;
 }
 
-// Build the default func menu command list of the file editor: the F10 "Exit"
-// command closes the editor display (asking what to do with the unsaved
-// changes first, as does the F6 "Edt/Vw" command when it leaves the editing
-// mode), the F3 "TabSz" command cycles the tab width of the editor. The func
-// menu redraws the apps of the context after a command has run, so the mode
-// change shows up in the editor and its status bar
+// Build the default func menu command list of the file editor: the F2 "Save"
+// command saves the file in the editing mode only, the F3 "TabSz" command
+// cycles the tab width of the editor, the F6 command toggles the editing mode
+// (the editor keeps its title and the F2 visibility up to date as its mode
+// changes) and the F10 "Exit" command closes the editor display (asking what
+// to do with the unsaved changes first). The func menu redraws the apps of
+// the context after a command has run, so the mode change shows up in the
+// editor and its status bar
 std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_editor_commands ()
 {
 	auto commands = make_func_menu_default_commands ();
+
+	(*commands)[1] = {
+		L"Save",
+
+		[] (::Wenv::Display::Display *display, ::Wenv::Context *context)
+		{
+			::Wenv::Apps::editor_save (display, context);
+		}
+	};
 
 	(*commands)[2] = {
 		L"TabSz",
@@ -88,7 +100,7 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_editor_commands
 	};
 
 	(*commands)[5] = {
-		L"Edt/Vw",
+		L"Edit",
 
 		[] (::Wenv::Display::Display *display, ::Wenv::Context *context)
 		{
@@ -262,6 +274,7 @@ void Window::initialize ()
 
             medium_panel->add_row (1, 1, 0);
             medium_panel->add_row (3, 666, 0);
+            medium_panel->add_row (1, 1, 0);
             medium_panel->add_row (3, 3, 0);
             medium_panel->add_column (0, 0, 50.);
             medium_panel->add_column (0, 0, 50.);
@@ -272,10 +285,11 @@ void Window::initialize ()
             auto c1 = d->add_app (new ::Wenv::Apps::FileList { L"1" });
             auto c2 = d->add_app (new ::Wenv::Apps::FileList { L"2" });
             auto c3 = d->add_app (new ::Wenv::Apps::FileInfoShort { L"i" });
+            auto c4 = d->add_app (new ::Wenv::Apps::FileListSelectedFiles { L"s" });
             d->add_app (func_menu);
 
-            left_context->set ("app-group", new std::vector<::Wenv::Apps::App *> { c0, c1, c2, c3, func_menu });
-            right_context->set ("app-group", new std::vector<::Wenv::Apps::App *> { c0, c1, c2, c3, func_menu });
+            left_context->set ("app-group", new std::vector<::Wenv::Apps::App *> { c0, c1, c2, c3, c4, func_menu });
+            right_context->set ("app-group", new std::vector<::Wenv::Apps::App *> { c0, c1, c2, c3, c4, func_menu });
             left_context->set ("focused-app", c1);
             right_context->set ("focused-app", c1);
             left_context->set ("focused-path", new std::string { "root.0.1" });
@@ -287,7 +301,11 @@ void Window::initialize ()
             medium_panel->add_block ({ 0, 0, 2, 1 }, -1, nullptr, c0);
             medium_panel->add_block ({ 0, 1, 1, 1 }, 1, nullptr, c1);
             medium_panel->add_block ({ 1, 1, 1, 1 }, 1, nullptr, c2);
-            medium_panel->add_block ({ 0, 2, 2, 1 }, 1, nullptr, c3);
+            // The selected files strip: a borderless full-width block, so its
+            // contents may overwrite the boundary between the file lists and
+            // the file info panel
+            medium_panel->add_block ({ 0, 2, 2, 1 }, -1, nullptr, c4);
+            medium_panel->add_block ({ 0, 3, 2, 1 }, 1, nullptr, c3);
         }
 
         grid->add_row (0, 666, 0.0);
@@ -380,8 +398,9 @@ void Window::initialize ()
         grid->context->set ("status-bar", status);
 	grid->context->set ("func-menu", func_menu);
 
-	// The default command list of the editor: F3 cycles the tab width, F6
-	// toggles the editing mode, F10 exits the display
+	// The default command list of the editor: F2 saves the file in the
+	// editing mode, F3 cycles the tab width, F6 toggles the editing mode,
+	// F10 exits the display
 	grid->context->set ("func_menu.default", make_func_menu_file_editor_commands ());
 
         d->grid = grid;
