@@ -41,11 +41,13 @@ void ModalButtons::redraw (const std::string &path)
 		return;
 	}
 
-	// Clamp the active index to the visible buttons so a stale index
-	// (from a previously shown modal) cannot point past the list
-	if (*active < 0 || *active >= (int) buttons->size ())
+	// Clamp the active index into the visible buttons so a stale index
+	// (from a previously shown modal) cannot point past the list; a negative
+	// index means no active button: the keyboard focus sits in another row
+	// of the modal
+	if (*active >= (int) buttons->size ())
 	{
-		*active = (std::max) (0, (std::min) ((int) buttons->size () - 1, *active));
+		*active = (int) buttons->size () - 1;
 	}
 
 	// Format each button as "[ TEXT ]" and measure the whole row so it can be

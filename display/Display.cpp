@@ -128,7 +128,8 @@ void Display::show_modal
 	const std::string &border_color,
 	const std::string &title_color,
 	const std::string &text_color,
-	const std::wstring &input
+	const std::wstring &input,
+	int active_button
 )
 {
 	auto modal = get_modal (modal_name);
@@ -148,8 +149,10 @@ void Display::show_modal
 	ctx->set ("modal-title", new std::wstring { title });
 	ctx->set ("modal-text", new std::wstring { text });
 	ctx->set ("modal-buttons", new std::vector<::Wenv::Display::ModalButton> { buttons });
-	// The first button is the active one when the modal appears
-	ctx->set ("modal-active-button", new int { 0 });
+	// The given button of the bottom row is the active one when the modal
+	// appears (a negative one means no active button: the keyboard focus
+	// starts in another row of the modal)
+	ctx->set ("modal-active-button", new int { active_button });
 	// The text input starts with the given prefill and the cursor at its end
 	ctx->set ("modal-text-input", new std::wstring { input });
 	ctx->set ("modal-text-input-cursor", new int { (int) input.length () });

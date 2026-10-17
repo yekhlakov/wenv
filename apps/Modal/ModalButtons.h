@@ -17,18 +17,24 @@ namespace Wenv::Apps
 // activates that button, even when it is not the currently active one.
 class ModalButtons : public App
 {
-	// The buttons row is redrawn from its own client area when the active
-	// button moves, so the area is kept here instead of resolving a path
-	::Wenv::Display::Rect own_area;
-
-	// The per-parameter accessors to the current context (see the .cpp)
-	std::vector<::Wenv::Display::ModalButton> * get_buttons ();
+	// The per-parameter accessors to the current context (see the .cpp);
+	// the button list and the active index accessors are virtual, so a
+	// derived app can bind them to their own context elements
+	virtual std::vector<::Wenv::Display::ModalButton> * get_buttons ();
 	std::string * get_border_color ();
-	int * get_active_button ();
+	virtual int * get_active_button ();
+
+protected:
 
 	// Activate the button with the given index as if enter was pressed while it
 	// was active: its command is run, the modal is closed and the display redrawn
 	void activate (int index);
+
+private:
+
+	// The buttons row is redrawn from its own client area when the active
+	// button moves, so the area is kept here instead of resolving a path
+	::Wenv::Display::Rect own_area;
 
 public:
 	ModalButtons (const std::wstring &n) : App { n } {}

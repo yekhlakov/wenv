@@ -65,7 +65,8 @@ struct Display
 
 	// Put the given title, text, buttons and the prefilled text input into
 	// the "modal" context, mark the named modal as the current one and redraw
-	// the display
+	// the display. A negative active_button means no active button of the
+	// bottom row: the keyboard focus starts in another row of the modal
 	void show_modal (
 		const std::string &modal_name,
 		const std::wstring &title,
@@ -74,7 +75,8 @@ struct Display
 		const std::string &border_color = ::Wenv::Display::Palette::Active_element_color,
 		const std::string &title_color = ::Wenv::Display::Palette::Default_color,
 		const std::string &text_color = ::Wenv::Display::Palette::Default_color,
-		const std::wstring &input = L""
+		const std::wstring &input = L"",
+		int active_button = 0
 	);
 
 	// Close the currently shown modal (if any) and redraw the display without

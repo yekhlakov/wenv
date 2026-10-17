@@ -151,6 +151,7 @@
     <ClInclude Include="apps\FileManager\FileInfoShort.h" />
     <ClInclude Include="apps\FileManager\FileListSelectedFiles.h" />
     <ClInclude Include="apps\Modal\ModalTextInput.h" />
+    <ClInclude Include="apps\Modal\ModalDriveButtons.h" />
     <ClInclude Include="display\Palette.h" />
     <ClInclude Include="Context.h" />
     <ClInclude Include="framework.h" />
@@ -178,6 +179,7 @@
     <ClCompile Include="apps\FileManager\FileListSelectedFiles.cpp" />
     <ClCompile Include="apps\FuncMenu\FuncMenu.cpp" />
     <ClCompile Include="apps\Modal\ModalButtons.cpp" />
+    <ClCompile Include="apps\Modal\ModalDriveButtons.cpp" />
     <ClCompile Include="apps\Modal\ModalText.cpp" />
     <ClCompile Include="apps\Modal\ModalTextInput.cpp" />
     <ClCompile Include="apps\Modal\ModalTitle.cpp" />

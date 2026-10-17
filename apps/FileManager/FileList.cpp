@@ -1487,6 +1487,157 @@ static void mkdir_modal_create (::Wenv::Display::Display *display)
 	}
 }
 
+// Change the working directory of the given panel context and forget the
+// cached listing and the selection, so the panel rescans the new directory
+// (and drops the files selected in the old one) on the next redraw
+static void change_panel_directory (::Wenv::Context *c, const std::wstring &path)
+{
+	auto pwd = c->get<std::wstring> ("pwd");
+
+	if (pwd == nullptr)
+	{
+		return;
+	}
+
+	*pwd = path;
+
+	// The cached contents belong to the directory being left
+	c->erase ("list");
+	c->erase ("sorted-list");
+	c->erase ("selected-files");
+	c->erase ("selected-stats");
+}
+
+// The root of the drive of the given path: everything up to and including
+// the first backslash ("C:\My\Super\Dir" gives "C:\"); the path itself when
+// it holds no backslash at all
+static std::wstring get_drive_root (const std::wstring &path)
+{
+	auto pos = path.find_first_of (L"\\/");
+
+	return pos != std::wstring::npos ? path.substr (0, pos + 1) : path;
+}
+
+// The command of a drive button of the "go to directory" modal: the working
+// directory of the panel focused when the modal was shown becomes the root
+// of that drive
+static void goto_modal_drive (::Wenv::Display::Display *display, const std::wstring &root)
+{
+	if (display->focused_context != nullptr)
+	{
+		change_panel_directory (display->focused_context, root);
+	}
+}
+
+// The command of the Go button of the "go to directory" modal: the working
+// directory of the panel focused when the modal was shown becomes the typed
+// path. A path that is not an existing directory brings the simplest
+// warning modal up and leaves the directory unchanged
+static void goto_modal_go (::Wenv::Display::Display *display)
+{
+	auto ctx = display->get_context ("modal");
+
+	// The panel that was active when the modal was shown still holds the
+	// focus, so its working directory is the one changed
+	if (ctx == nullptr || display->focused_context == nullptr)
+	{
+		return;
+	}
+
+	auto input = ctx->get<std::wstring> ("modal-text-input");
+	auto pwd = display->focused_context->get<std::wstring> ("pwd");
+
+	// An empty input changes nothing
+	if (input == nullptr || input->empty () || pwd == nullptr)
+	{
+		return;
+	}
+
+	// A relative path points into the working directory of the panel
+	auto target = is_absolute_path (*input) ? *input : *pwd + L"\\" + *input;
+
+	wchar_t canonical[2000];
+
+	if (PathCanonicalize (canonical, target.c_str ()) && is_directory (canonical))
+	{
+		change_panel_directory (display->focused_context, canonical);
+		return;
+	}
+
+	std::vector<::Wenv::Display::ModalButton> buttons =
+	{
+		{ L"OK", nullptr }
+	};
+
+	display->show_modal
+	(
+		"warning",
+		L"GoTo failed",
+		L"No such directory: " + target,
+		buttons,
+		::Wenv::Display::Palette::Warning_element_color,
+		::Wenv::Display::Palette::Warning_element_color,
+		::Wenv::Display::Palette::Default_color
+	);
+}
+
+// Show the "Go to directory" modal of the active file list panel
+void show_goto_modal (::Wenv::Display::Display *display, ::Wenv::Context *c)
+{
+	auto pwd = c->get<std::wstring> ("pwd");
+
+	if (pwd == nullptr || pwd->empty ())
+	{
+		return;
+	}
+
+	// One button per drive present in the system right now: the list is
+	// rediscovered every time the modal is shown. The buffer holds the
+	// null-terminated root paths one after another, with an empty one
+	// marking the end of the list
+	std::vector<::Wenv::Display::ModalButton> drives;
+	wchar_t drive_strings[1024] = {};
+	auto len = GetLogicalDriveStringsW (1023, drive_strings);
+
+	for (size_t i = 0; i < len && drive_strings[i] != L'\0'; i += wcslen (drive_strings + i) + 1)
+	{
+		auto root = std::wstring { drive_strings + i };
+
+		drives.push_back ({ root, [root] (::Wenv::Display::Display *d) { goto_modal_drive (d, root); } });
+	}
+
+	std::vector<::Wenv::Display::ModalButton> buttons =
+	{
+		{ L"Go", goto_modal_go },
+		{ L"Cancel", nullptr }
+	};
+
+	auto ctx = display->get_context ("modal");
+
+	// The drive buttons go into the modal context before the modal is shown:
+	// the drive row app draws from it and the modal sizes its row from it.
+	// The keyboard focus starts on the first drive button, so the bottom row
+	// begins with no active button
+	if (ctx != nullptr)
+	{
+		ctx->set ("modal-extra-buttons", new std::vector<::Wenv::Display::ModalButton> { drives });
+		ctx->set ("modal-extra-active-button", new int { 0 });
+	}
+
+	display->show_modal
+	(
+		"goto",
+		L"Go to directory",
+		L"Directory:",
+		buttons,
+		::Wenv::Display::Palette::Active_element_color,
+		::Wenv::Display::Palette::Default_color,
+		::Wenv::Display::Palette::Default_color,
+		get_drive_root (*pwd),
+		-1
+	);
+}
+
 // Whether the file of the given name is a directory in the listing of the
 // given panel
 static bool is_listed_directory (::Wenv::Context *c, const std::wstring &name)

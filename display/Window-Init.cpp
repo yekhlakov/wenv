@@ -20,6 +20,7 @@
 #include "../apps/Modal/ModalText.h"
 #include "../apps/Modal/ModalTextInput.h"
 #include "../apps/Modal/ModalButtons.h"
+#include "../apps/Modal/ModalDriveButtons.h"
 
 namespace Wenv::Display
 {
@@ -121,15 +122,26 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_editor_commands
 }
 
 // Build the default func menu command list of the file list: in addition to
-// the common F10 "Exit" it has the F3 "View" and F4 "Edit" commands, which show
-// the file selected in the panel in the editor - either closed for editing or
-// open for it, which its status bar shows as a lock, and the F5 "Copy", F6
-// "Move", F7 "Mkdir" and F8 "Delete" commands, which show the modals asking
-// where to copy or move the selected file to, what directory to create, or
-// whether to delete the selected file
+// the common F10 "Exit" it has the F2 "GoTo" command, which shows the modal
+// asking what directory to switch the active panel to (a button per drive in
+// the upper row, the path typed into the text input), the F3 "View" and F4
+// "Edit" commands, which show the file selected in the panel in the editor -
+// either closed for editing or open for it, which its status bar shows as a
+// lock, and the F5 "Copy", F6 "Move", F7 "Mkdir" and F8 "Delete" commands,
+// which show the modals asking where to copy or move the selected file to,
+// what directory to create, or whether to delete the selected file
 std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_list_commands ()
 {
 	auto commands = make_func_menu_default_commands ();
+
+	(*commands)[1] = {
+		L"GoTo",
+
+		[] (::Wenv::Display::Display *display, ::Wenv::Context *context)
+		{
+			::Wenv::Apps::show_goto_modal (display, context);
+		}
+	};
 
 	(*commands)[2] = {
 		L"View",
@@ -362,6 +374,22 @@ void Window::initialize ()
         };
         input_modal->has_input_line = true;
         d->add_modal ("text-input", input_modal);
+
+        // The "go to directory" modal: an extra block under the title holds
+        // the drive buttons row, the middle block is the text input one
+        auto modal_drive_buttons = d->add_app (new ::Wenv::Apps::ModalDriveButtons { L"modal-drive-buttons" });
+
+        auto goto_modal = new ::Wenv::Display::Modal {
+            modal_title,
+            modal_text_input,
+            modal_buttons,
+            ::Wenv::Display::Palette::Active_element_color,
+            ::Wenv::Display::Palette::Default_color,
+            ::Wenv::Display::Palette::Default_color,
+            true,
+            modal_drive_buttons
+        };
+        d->add_modal ("goto", goto_modal);
 
         // The warning modal reporting a failed file operation: the plain
         // text one, drawn in the warning color by the command that shows it

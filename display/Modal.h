@@ -24,8 +24,8 @@ struct ModalButton
 // A modal box drawn on top of the display contents.
 // A modal stores no content: its title, text and buttons are kept in the "modal"
 // context of the display (populated by Display::show_modal), and the contents of
-// its three inner blocks are drawn by the ModalTitle, ModalText and ModalButtons
-// apps attached to them. The modal itself only positions its grid.
+// its inner blocks are drawn by the ModalTitle, ModalText and ModalButtons apps
+// attached to them. The modal itself only positions its grid.
 struct Modal
 {
 	// Fallback palette color names used to draw the border, the title and the text
@@ -36,7 +36,8 @@ struct Modal
 	std::string text_color;
 
 	// The grid of this modal: a 1x1 outer grid with a single double-bordered block
-	// hiding a 3x1 inner grid of single-bordered blocks (title, text, buttons)
+	// hiding an inner grid of single-bordered blocks (title, text, buttons, plus
+	// the optional extra row between the title and the text)
 	::Wenv::Layout::Grid *grid = nullptr;
 
 	// The inner grid of the modal (owned along with the outer grid)
@@ -50,6 +51,12 @@ struct Modal
 	// block gets one extra line and the typed text counts into the width
 	bool has_input_line;
 
+	// The app that draws the optional extra row between the title and the
+	// text (e.g. the drive buttons of the "go to directory" modal); the
+	// buttons of the row are kept in the "modal-extra-buttons" element of
+	// the "modal" context, which also sizes the row. nullptr = no extra row
+	::Wenv::Apps::App *extra_app = nullptr;
+
 	Modal (
 		::Wenv::Apps::App *title_app,
 		::Wenv::Apps::App *text_app,
@@ -57,7 +64,8 @@ struct Modal
 		const std::string &border_color = ::Wenv::Display::Palette::Active_element_color,
 		const std::string &title_color = ::Wenv::Display::Palette::Default_color,
 		const std::string &text_color = ::Wenv::Display::Palette::Default_color,
-		bool has_input_line = false
+		bool has_input_line = false,
+		::Wenv::Apps::App *extra_app = nullptr
 	);
 	~Modal ();
 

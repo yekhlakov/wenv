@@ -17,7 +17,8 @@ Modal::Modal
 	const std::string &border_color,
 	const std::string &title_color,
 	const std::string &text_color,
-	bool has_input_line
+	bool has_input_line,
+	::Wenv::Apps::App *extra_app
 ) :
 	border_color { border_color },
 	title_color { title_color },
@@ -27,25 +28,46 @@ Modal::Modal
 	inner_grid { new ::Wenv::Layout::Grid {} },
 	apps { title_app, text_app, buttons_app }
 {
+	this->extra_app = extra_app;
+
 	// The outer grid is a single cell with a double border hiding the inner grid
 	grid->add_row (0, 0, 100);
 	grid->add_column (0, 0, 100);
 	grid->is_exclusive = true;
 
-	// The inner grid stacks three single-bordered blocks vertically:
-	// the title (fixed 3 lines), the text (flexible) and the buttons (fixed 3 lines)
+	// The inner grid stacks single-bordered blocks vertically: the title
+	// (fixed 3 lines), the optional extra row (fixed 3 lines), the text
+	// (flexible) and the buttons (fixed 3 lines)
 	inner_grid->add_row (3, 3, 0);
+
+	if (extra_app != nullptr)
+	{
+		inner_grid->add_row (3, 3, 0);
+	}
+
 	inner_grid->add_row (0, 666, 0);
 	inner_grid->add_row (3, 3, 0);
 	inner_grid->add_column (0, 0, 100);
 	inner_grid->is_exclusive = false;
 
-	// The three blocks render the modal contents through their attached apps
+	// The blocks render the modal contents through their attached apps
 	inner_grid->add_block ({ 0, 0, 1, 1 }, 1, nullptr, title_app);
-	inner_grid->add_block ({ 0, 1, 1, 1 }, 1, nullptr, text_app);
-	inner_grid->add_block ({ 0, 2, 1, 1 }, 1, nullptr, buttons_app);
+
+	if (extra_app != nullptr)
+	{
+		inner_grid->add_block ({ 0, 1, 1, 1 }, 1, nullptr, extra_app);
+	}
+
+	inner_grid->add_block ({ 0, extra_app != nullptr ? 2 : 1, 1, 1 }, 1, nullptr, text_app);
+	inner_grid->add_block ({ 0, extra_app != nullptr ? 3 : 2, 1, 1 }, 1, nullptr, buttons_app);
 
 	grid->add_block ({ 0, 0, 1, 1 }, 2, inner_grid);
+
+	// The extra row app receives the key events right after the title
+	if (extra_app != nullptr)
+	{
+		apps.insert (apps.begin () + 1, extra_app);
+	}
 }
 
 Modal::~Modal ()
@@ -76,6 +98,7 @@ void Modal::draw (::Wenv::Display::Display &display)
 	auto text = ctx != nullptr ? ctx->get<std::wstring> ("modal-text") : nullptr;
 	auto input = ctx != nullptr ? ctx->get<std::wstring> ("modal-text-input") : nullptr;
 	auto buttons = ctx != nullptr ? ctx->get<std::vector<ModalButton>> ("modal-buttons") : nullptr;
+	auto extra_buttons = ctx != nullptr ? ctx->get<std::vector<ModalButton>> ("modal-extra-buttons") : nullptr;
 	auto border = ctx != nullptr ? ctx->get<std::string> ("modal-border-color") : nullptr;
 	auto title_clr = ctx != nullptr ? ctx->get<std::string> ("modal-title-color") : nullptr;
 	auto text_clr = ctx != nullptr ? ctx->get<std::string> ("modal-text-color") : nullptr;
@@ -102,14 +125,33 @@ void Modal::draw (::Wenv::Display::Display &display)
 		buttons_len += (int) button_list.size () - 1;
 	}
 
-	// The modal must be wide enough for the title, the text and the buttons;
-	// the input line adds its framed text ("[ ... ]") to the minimal width
+	// The extra row (e.g. the drive buttons) counts into the minimal width
+	// the same way the button row does
+	auto extra_len = 0;
+
+	if (extra_app != nullptr && extra_buttons != nullptr)
+	{
+		for (auto &button : *extra_buttons)
+		{
+			extra_len += (int) button.text.length () + 4;
+		}
+
+		if (extra_buttons->size () > 1)
+		{
+			extra_len += (int) extra_buttons->size () - 1;
+		}
+	}
+
+	// The modal must be wide enough for the title, the text, the buttons and
+	// the extra row; the input line adds its framed text ("[ ... ]") to the
+	// minimal width
 	auto input_len = has_input_line && input != nullptr ? (int) input->length () : 0;
-	auto content_width = (std::max) ((std::max) ((std::max) ((int) title_text.length (), text_rect.width), buttons_len), input_len + 4);
+	auto content_width = (std::max) ((std::max) ((std::max) ((std::max) ((std::max) ((int) title_text.length (), text_rect.width), buttons_len), input_len + 4), extra_len), 1);
 
 	// The middle block gets one extra line for the text input box under the
-	// text, plus the two lines of its own borders
-	auto content_height = (std::max) (text_rect.height, 1) + (has_input_line ? 3 : 0);
+	// text, plus the two lines of its own borders; the extra row adds its
+	// block borders on top of that
+	auto content_height = (std::max) (text_rect.height, 1) + (has_input_line ? 3 : 0) + (extra_app != nullptr ? 3 : 0);
 
 	// The outer double border adds 2 characters around the inner grid; the stacked
 	// single-bordered blocks add 4 more lines for their borders at the outer edges

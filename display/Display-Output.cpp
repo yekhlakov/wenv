@@ -604,23 +604,51 @@ void Display::draw_block_boundary (::Wenv::Layout::Block &b, const std::string &
 
 // Redraw grid boundaries that cross the given display row within the given
 // horizontal span (recursively). App contents are not redrawn; use this to
-// restore borders that a title was drawn over. The boundaries are drawn in the
-// given palette color, ignoring the ambient drawing colors
+// restore borders that a title was drawn over. Only the boundary pieces that
+// actually lie on the given row are redrawn: a block that merely spans the
+// row (e.g. the whole panel around an inner strip) has the rest of its
+// boundary far away from the row, where redrawing it would overwrite
+// unrelated contents (e.g. a directory name printed over the panel border)
 void Display::redraw_boundaries_on_row (::Wenv::Layout::Grid &grid, std::string path, int y, int x_begin, int x_end, const std::string &color)
 {
 	int bnum = 0;
 	for (auto &b : grid.blocks)
 	{
 		auto bpath = std::format ("{}.{}", path, bnum++);
-		auto &c = b.instances[bpath].container_dimensions;
+		auto &inst = b.instances[bpath];
 
 		// Skip blocks that do not cross the row within the given span
-		if (c.y > y || y >= c.y + c.height || c.x >= x_end || x_begin >= c.x + c.width)
+		if (inst.container_dimensions.y > y || y >= inst.container_dimensions.y + inst.container_dimensions.height ||
+			inst.container_dimensions.x >= x_end || x_begin >= inst.container_dimensions.x + inst.container_dimensions.width)
 		{
 			continue;
 		}
 
-		draw_block_boundary (b, bpath, color);
+		if (b.btype >= 0)
+		{
+			// The boundaries are drawn in their own color so the ambient
+			// drawing colors of the display cannot bleed into them
+			with_color (color);
+
+			// The top boundary line when it lies on the row itself
+			if (inst.container_dimensions.y == y)
+			{
+				print_line (inst.container_dimensions.x, y, inst.top_boundary);
+			}
+
+			// The bottom boundary line when it lies on the row itself
+			if (inst.container_dimensions.y + inst.container_dimensions.height - 1 == y)
+			{
+				print_line (inst.container_dimensions.x, y, inst.bottom_boundary);
+			}
+
+			// The crossing verticals: a single character of each side wall
+			if (inst.container_dimensions.y < y && y < inst.container_dimensions.y + inst.container_dimensions.height - 1)
+			{
+				print_char (inst.container_dimensions.x, y, inst.left_boundary[y - inst.container_dimensions.y - 1]);
+				print_char (inst.container_dimensions.x + inst.container_dimensions.width - 1, y, inst.right_boundary[y - inst.container_dimensions.y - 1]);
+			}
+		}
 
 		if (b.grid != nullptr)
 		{

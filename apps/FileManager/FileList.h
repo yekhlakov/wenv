@@ -71,6 +71,18 @@ void show_move_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c
 // offering to try again or to cancel
 void show_mkdir_modal (::Wenv::Display::Display *display);
 
+// Show the "Go to directory" modal of the active file list panel: the row
+// under the title holds a button for every drive present in the system at
+// the moment (the list is rediscovered each time the modal is shown), the
+// text input box is prefilled with the root of the current drive of the
+// panel. A drive button changes the working directory of the panel to the
+// root of its drive; the Go button changes it to the typed path, a missing
+// one brings the simplest warning modal up and leaves the directory
+// unchanged; the Cancel button closes the modal doing nothing. The Tab key
+// moves the keyboard focus cyclically over all the buttons (the drives
+// first, then Go and Cancel), the Enter activates the focused one
+void show_goto_modal (::Wenv::Display::Display *display, ::Wenv::Context *c);
+
 // Show the confirmation modal of the active file list panel, in the warning
 // color: it asks whether to delete the given files, naming them (at most
 // three by name, the rest are counted; a directory is named as such, and a
