@@ -92,6 +92,10 @@ struct Window {
     void handle_resize (WPARAM wParam, LPARAM lParam);
     void handle_keydown (WPARAM wParam, LPARAM lParam);
     void handle_keyup (WPARAM wParam, LPARAM lParam);
+
+    // Release every key currently registered as pressed (e.g. on focus loss,
+    // when the key releases are lost to the window that took the focus)
+    void handle_killfocus ();
     void handle_mousemove (WPARAM wParam, LPARAM lParam);
     void handle_mouse_click (WPARAM wParam, LPARAM lParam);
 

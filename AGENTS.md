@@ -88,6 +88,7 @@ void processAgentData (int id)
 - Extract similar code fragments into separate method(s) to reuse.
 - Comment the code you produce. Comment the resulting state of the code, not the nature of the changes.
 - Use `chcp 65001` in bat scripts to switch shell encoding to utf-8 so that warnings don't appear broken
+- Use tools from `narsil` mcp to browse codebase, search symbol usages etc.
 
 ## Negative rules
 

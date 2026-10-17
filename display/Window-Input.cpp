@@ -40,6 +40,20 @@ void Window::handle_keyup (WPARAM wParam, LPARAM lParam)
 	dispatch_key_event (wParam, current_mods (), false);
 }
 
+// The window has lost the keyboard focus (e.g. to the alt-tab switcher): the
+// releases of the keys held at this moment will never be reported, so they are
+// all released here, propagating the keyup events to the apps as usual
+void Window::handle_killfocus ()
+{
+	for (int key = 0; key < 256; key++)
+	{
+		if (key_state[key])
+		{
+			handle_keyup (key, 0);
+		}
+	}
+}
+
 // Dispatch a key press or key release to the apps of the display: while a modal
 // is visible every event goes to the modal apps only, otherwise the event is
 // forwarded to the apps that want all keypresses (e.g. the func menu) and then

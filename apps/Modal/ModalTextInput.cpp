@@ -142,7 +142,32 @@ bool ModalTextInput::handle_keydown (unsigned int key, int modifiers)
 	// The cursor is kept within the text limits
 	*cursor = (std::max) (0, (std::min) ((int) input->size (), *cursor));
 
-	if (key == VK_LEFT)
+	// Whether no key has been pressed since the modal appeared; the flag is
+	// consumed by the first keypress whatever it is
+	auto fresh = current_context->get<bool> ("modal-text-input-fresh");
+	auto is_fresh = fresh != nullptr && *fresh;
+
+	if (fresh != nullptr)
+	{
+		*fresh = false;
+	}
+
+	if (key == VK_ESCAPE)
+	{
+		// The escape closes the modal without running any button command
+		current_display->close_modal ();
+		return true;
+	}
+	else if (key == VK_BACK && is_fresh)
+	{
+		// The backspace pressed as the very first key after the modal
+		// opening empties the whole prefilled input
+		input->clear ();
+		*cursor = 0;
+		redraw ("");
+		return true;
+	}
+	else if (key == VK_LEFT)
 	{
 		// The cursor cannot move before the beginning of the text
 		*cursor = (std::max) (0, *cursor - 1);

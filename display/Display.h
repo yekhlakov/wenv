@@ -77,6 +77,12 @@ struct Display
 		const std::wstring &input = L""
 	);
 
+	// Close the currently shown modal (if any) and redraw the display without
+	// it: the apps of the closed modal no longer hold the text cursor, so it
+	// is hidden as well (the apps that own it make it visible again during
+	// their redraw). Unlike the button commands, no button is activated
+	void close_modal ();
+
 	// Get the global context shared across all displays (owned by the window)
 	::Wenv::Context *get_persistent_context ();
 

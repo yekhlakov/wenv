@@ -13,7 +13,10 @@ namespace Wenv::Apps
 // kept in the "modal" context. The box works as the simplest single-line
 // editor: the regular keypresses insert their characters at the cursor, the
 // left and right arrows move the cursor (it cannot move beyond the text
-// limits), backspace and delete remove a character before/under the cursor
+// limits), backspace and delete remove a character before/under the cursor;
+// the backspace pressed as the very first key after the modal opening
+// empties the whole prefilled input, and the escape closes the modal
+// without running any button command
 class ModalTextInput : public App
 {
 	// The box is redrawn from its own client area when the text changes, so

@@ -153,6 +153,9 @@ void Display::show_modal
 	// The text input starts with the given prefill and the cursor at its end
 	ctx->set ("modal-text-input", new std::wstring { input });
 	ctx->set ("modal-text-input-cursor", new int { (int) input.length () });
+	// No key has been pressed since the modal appeared, so the text input
+	// treats the very first backspace in its own way
+	ctx->set ("modal-text-input-fresh", new bool { true });
 	ctx->set ("modal-border-color", new std::string { border_color });
 	ctx->set ("modal-title-color", new std::string { title_color });
 	ctx->set ("modal-text-color", new std::string { text_color });
@@ -175,6 +178,22 @@ void Display::show_modal
 	}
 
 	return window->persistent_context;
+}
+
+// Close the currently shown modal (if any) and redraw the display without it:
+// the apps of the closed modal no longer hold the text cursor, so it is
+// hidden as well (the apps that own it make it visible again during their
+// redraw). Unlike the activation of a button, no button command is run
+void Display::close_modal ()
+{
+	current_modal = nullptr;
+	is_cursor_visible = false;
+
+	if (window != nullptr && window->container_width > 0 && window->container_height > 0)
+	{
+		// Re-bake the display so the modal disappears
+		window->current_display->resize ((size_t) window->container_width, (size_t) window->container_height);
+	}
 }
 
 } // namespace Wenv::Display

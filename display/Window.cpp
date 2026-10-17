@@ -353,6 +353,12 @@ LRESULT CALLBACK Window::WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM 
         pWindow->handle_keyup (wParam, 0);
         break;
 
+    case WM_KILLFOCUS:
+        // The keys held when the focus is lost never get their releases:
+        // release them all so the apps do not see the modifiers stuck
+        pWindow->handle_killfocus ();
+        break;
+
     case WM_LBUTTONDOWN:
         pWindow->handle_mouse_click (wParam, lParam);
         break;
