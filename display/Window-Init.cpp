@@ -219,6 +219,44 @@ std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_list_shift_comm
 	return commands;
 }
 
+// Build the ctrl func menu command list of the file list: the Ctrl+F3 "Name",
+// Ctrl+F5 "Write" and Ctrl+F6 "Size" commands sort the active panel by name,
+// by last-write date or by size. Requesting the sort key that is already in
+// effect flips the ascending/descending order instead
+std::vector<::Wenv::Apps::FuncMenuCommand> * make_func_menu_file_list_ctrl_commands ()
+{
+	auto commands = new std::vector<::Wenv::Apps::FuncMenuCommand> (12);
+
+	(*commands)[2] = {
+		L"Name",
+
+		[] (::Wenv::Display::Display *, ::Wenv::Context *context)
+		{
+			::Wenv::Apps::set_file_list_sort_mode (context, ::Wenv::Apps::FileList::SORT_MODE_NAME);
+		}
+	};
+
+	(*commands)[4] = {
+		L"Write",
+
+		[] (::Wenv::Display::Display *, ::Wenv::Context *context)
+		{
+			::Wenv::Apps::set_file_list_sort_mode (context, ::Wenv::Apps::FileList::SORT_MODE_DATE);
+		}
+	};
+
+	(*commands)[5] = {
+		L"Size",
+
+		[] (::Wenv::Display::Display *, ::Wenv::Context *context)
+		{
+			::Wenv::Apps::set_file_list_sort_mode (context, ::Wenv::Apps::FileList::SORT_MODE_SIZE);
+		}
+	};
+
+	return commands;
+}
+
 void Window::initialize ()
 {
     // Palette
@@ -267,10 +305,12 @@ void Window::initialize ()
 
         // The parent context shared by both panels: it holds the default
         // func menu command list (F3/F4 show the selected file in the editor,
-        // F10 exits the application)
+        // F10 exits the application), the shift one (Shift+F4 opens the file
+        // name modal) and the ctrl one (Ctrl+F3/F5/F6 sort the active panel)
         auto main_context = d->add_context (new ::Wenv::Context { "file-manager" });
         main_context->set ("func_menu.default", make_func_menu_file_list_commands ());
         main_context->set ("func_menu.shift", make_func_menu_file_list_shift_commands ());
+        main_context->set ("func_menu.ctrl", make_func_menu_file_list_ctrl_commands ());
 
         auto left_context = d->add_context (new ::Wenv::Context { "file-manager-left-panel" });
         left_context->parent = main_context;

@@ -2,6 +2,7 @@
 #include <cwchar>
 #include <format>
 #include <map>
+#include <memory>
 #include <regex>
 #include <Shlwapi.h>
 #include <Windows.h>
@@ -94,6 +95,14 @@ File_list_type * sort_file_list (File_list_type *v, int sort_mode)
 		sort_mode == FileList::SORT_MODE_REVERSE_SIZE ? [] (WIN32_FIND_DATAW &a, WIN32_FIND_DATAW &b) {
 			return a.nFileSizeHigh > b.nFileSizeHigh || a.nFileSizeHigh == b.nFileSizeHigh && a.nFileSizeLow > b.nFileSizeLow;
 		} :
+		// last-write date
+		sort_mode == FileList::SORT_MODE_DATE ? [] (WIN32_FIND_DATAW &a, WIN32_FIND_DATAW &b) {
+			return CompareFileTime (&a.ftLastWriteTime, &b.ftLastWriteTime) < 0;
+		} :
+		// reverse last-write date
+		sort_mode == FileList::SORT_MODE_REVERSE_DATE ? [] (WIN32_FIND_DATAW &a, WIN32_FIND_DATAW &b) {
+			return CompareFileTime (&a.ftLastWriteTime, &b.ftLastWriteTime) > 0;
+		} :
 		// default: NAME
 		[] (WIN32_FIND_DATAW &a, WIN32_FIND_DATAW &b) { return std::wstring { a.cFileName } < std::wstring { b.cFileName }; }
 	;
@@ -112,6 +121,55 @@ File_list_type * sort_file_list (File_list_type *v, int sort_mode)
 	std::ranges::copy (files, std::back_inserter (*v));
 
 	return v;
+}
+
+// The descending counterpart of the given ascending sort mode
+static int reverse_sort_mode (int sort_mode)
+{
+	switch (sort_mode)
+	{
+	case FileList::SORT_MODE_NAME: return FileList::SORT_MODE_REVERSE_NAME;
+	case FileList::SORT_MODE_SIZE: return FileList::SORT_MODE_REVERSE_SIZE;
+	case FileList::SORT_MODE_DATE: return FileList::SORT_MODE_REVERSE_DATE;
+	default: return sort_mode;
+	}
+}
+
+// Redraw the apps of the panel the given context belongs to, so a change of
+// its sort mode shows up right away
+static void redraw_panel (::Wenv::Context *c)
+{
+	auto apps = c->get<std::vector<App *>> ("app-group");
+	auto path = c->get<std::string> ("focused-path");
+
+	if (apps == nullptr)
+	{
+		return;
+	}
+
+	for (auto app : *apps)
+	{
+		app->with_context (c)->redraw (path != nullptr ? *path : std::string {});
+	}
+}
+
+void set_file_list_sort_mode (::Wenv::Context *c, int sort_mode)
+{
+	if (c == nullptr)
+	{
+		return;
+	}
+
+	auto current = c->get<int> ("sort-mode", [] () { return new int { FileList::SORT_MODE_DEFAULT }; });
+
+	// The requested key starts ascending; requesting it again flips the
+	// direction of the same key
+	*current = *current == sort_mode ? reverse_sort_mode (sort_mode) : sort_mode;
+
+	// The cached sorted listing belongs to the previous mode
+	c->erase ("sorted-list");
+
+	redraw_panel (c);
 }
 
 int *get_selected_file_idx (::Wenv::Context * c, const std::wstring &dirname)
@@ -198,6 +256,65 @@ static void remove_from_selection (::Wenv::Context *c, const std::wstring &full_
 			((unsigned long long) info->nFileSizeHigh << 32) | info->nFileSizeLow,
 			false
 		);
+	}
+}
+
+// The entry of the given name in the shown listing of the given panel
+// context, nullptr when the listing does not hold it
+static const WIN32_FIND_DATAW *find_listed_entry (::Wenv::Context *c, const std::wstring &name)
+{
+	auto lst = c->get<File_list_type> ("sorted-list");
+
+	if (lst != nullptr)
+	{
+		for (auto &fd : *lst)
+		{
+			if (std::wstring { fd.cFileName } == name)
+			{
+				return &fd;
+			}
+		}
+	}
+
+	return nullptr;
+}
+
+// Invert the mass selection of the panel of the given context: every
+// directory leaves the selection at once, every regular file of the shown
+// listing flips its selected state. The selection totals are kept in sync
+static void invert_selection (::Wenv::Context *c)
+{
+	auto pwd = c->get<std::wstring> ("pwd");
+	auto lst = c->get<File_list_type> ("sorted-list");
+
+	if (pwd == nullptr || lst == nullptr)
+	{
+		return;
+	}
+
+	auto selected = c->get<std::vector<std::wstring>> ("selected-files", [] () { return new std::vector<std::wstring> {}; });
+
+	for (auto &fd : *lst)
+	{
+		auto name = std::wstring { fd.cFileName };
+		auto is_dir = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+		auto full_name = make_full_path (*pwd, name);
+		auto pos = std::find (selected->begin (), selected->end (), full_name);
+		auto size = ((unsigned long long) fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
+
+		if (pos != selected->end ())
+		{
+			// A selected entry leaves the selection along with its share of
+			// the totals
+			selected->erase (pos);
+			apply_stats (c, is_dir, size, false);
+		}
+		else if (!is_dir)
+		{
+			// Only a file joins the selection, a directory stays out of it
+			selected->push_back (full_name);
+			apply_stats (c, is_dir, size, true);
+		}
 	}
 }
 
@@ -379,6 +496,186 @@ void show_open_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c
 	}
 
 	show_open_file_modal_with (display, prefill);
+}
+
+// The compiled case-insensitive regex for the given pattern (the file names
+// are matched the way Windows compares them), nullptr when it does not
+// compile
+static std::unique_ptr<std::wregex> make_file_regex (const std::wstring &pattern)
+{
+	try
+	{
+		return std::make_unique<std::wregex> (pattern, std::regex_constants::icase);
+	}
+	catch (const std::regex_error &)
+	{
+		return nullptr;
+	}
+}
+
+// The commands of the Select and the Deselect buttons of the regex modals
+static void select_modal_files (::Wenv::Display::Display *display);
+static void deselect_modal_files (::Wenv::Display::Display *display);
+
+// Show the "Select by regex" / "Deselect by regex" modal of the active file
+// list panel: the text input box is prefilled with the given pattern, the
+// Select (Deselect) button applies it to the selection of the panel, the
+// Cancel one just closes the modal doing nothing
+static void show_regex_modal (::Wenv::Display::Display *display, bool is_selecting, const std::wstring &prefill)
+{
+	std::vector<::Wenv::Display::ModalButton> buttons =
+	{
+		{ is_selecting ? L"Select" : L"Deselect", is_selecting ? select_modal_files : deselect_modal_files },
+		{ L"Cancel", nullptr }
+	};
+
+	display->show_modal
+	(
+		"text-input",
+		is_selecting ? L"Select by regex" : L"Deselect by regex",
+		L"Regex:",
+		buttons,
+		::Wenv::Display::Palette::Active_element_color,
+		::Wenv::Display::Palette::Default_color,
+		::Wenv::Display::Palette::Default_color,
+		prefill
+	);
+}
+
+// The command of the Select button of the "Select by regex" modal: every
+// regular file of the shown listing whose name matches the typed pattern
+// joins the selection of the active panel, the already selected ones stay in
+// it once, the selected directories are left alone
+static void select_modal_files (::Wenv::Display::Display *display)
+{
+	auto ctx = display->get_context ("modal");
+
+	// The panel that was active when the modal was shown still holds the
+	// focus, so its listing is the one scanned
+	if (ctx == nullptr || display->focused_context == nullptr)
+	{
+		return;
+	}
+
+	auto c = display->focused_context;
+	auto input = ctx->get<std::wstring> ("modal-text-input");
+	auto pwd = c->get<std::wstring> ("pwd");
+	auto lst = c->get<File_list_type> ("sorted-list");
+
+	// An empty pattern has no effect
+	if (input == nullptr || input->empty () || pwd == nullptr || lst == nullptr)
+	{
+		return;
+	}
+
+	auto pattern = make_file_regex (*input);
+
+	// A pattern that does not compile selects nothing: the modal is shown
+	// again so the pattern can be fixed
+	if (pattern == nullptr)
+	{
+		show_regex_modal (display, true, *input);
+		return;
+	}
+
+	auto selected = c->get<std::vector<std::wstring>> ("selected-files", [] () { return new std::vector<std::wstring> {}; });
+
+	for (auto &fd : *lst)
+	{
+		// The pattern is applied to the files only, never the directories
+		if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+		{
+			continue;
+		}
+
+		auto name = std::wstring { fd.cFileName };
+
+		if (!std::regex_search (name, *pattern))
+		{
+			continue;
+		}
+
+		auto full_name = make_full_path (*pwd, name);
+
+		// A file already selected stays in the list once
+		if (std::find (selected->begin (), selected->end (), full_name) == selected->end ())
+		{
+			auto size = ((unsigned long long) fd.nFileSizeHigh << 32) | fd.nFileSizeLow;
+			selected->push_back (full_name);
+			apply_stats (c, false, size, true);
+		}
+	}
+
+	redraw_panel (c);
+}
+
+// The command of the Deselect button of the "Deselect by regex" modal: the
+// selected entries (the directories along with the files) whose names match
+// the typed pattern leave the selection of the active panel
+static void deselect_modal_files (::Wenv::Display::Display *display)
+{
+	auto ctx = display->get_context ("modal");
+
+	if (ctx == nullptr || display->focused_context == nullptr)
+	{
+		return;
+	}
+
+	auto c = display->focused_context;
+	auto input = ctx->get<std::wstring> ("modal-text-input");
+
+	// An empty pattern has no effect
+	if (input == nullptr || input->empty ())
+	{
+		return;
+	}
+
+	auto pattern = make_file_regex (*input);
+
+	if (pattern == nullptr)
+	{
+		show_regex_modal (display, false, *input);
+		return;
+	}
+
+	auto selected = c->get<std::vector<std::wstring>> ("selected-files", [] () { return new std::vector<std::wstring> {}; });
+
+	// The kept entries are gathered first, so the selection is replaced in
+	// one go
+	std::vector<std::wstring> kept;
+	kept.reserve (selected->size ());
+
+	for (auto &path : *selected)
+	{
+		auto name = path.substr (path.find_last_of (L"\\/") + 1);
+
+		if (std::regex_search (name, *pattern))
+		{
+			// The entry leaves the selection along with its share of the
+			// totals; the attributes come from the shown listing, an entry
+			// that has fallen out of it leaves the totals alone
+			auto fd = find_listed_entry (c, name);
+
+			if (fd != nullptr)
+			{
+				apply_stats
+				(
+					c,
+					(fd->dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0,
+					((unsigned long long) fd->nFileSizeHigh << 32) | fd->nFileSizeLow,
+					false
+				);
+			}
+		}
+		else
+		{
+			kept.push_back (path);
+		}
+	}
+
+	*selected = kept;
+
+	redraw_panel (c);
 }
 
 // The working directory of the panel opposite to the given one; the panel
@@ -1642,20 +1939,9 @@ void show_goto_modal (::Wenv::Display::Display *display, ::Wenv::Context *c)
 // given panel
 static bool is_listed_directory (::Wenv::Context *c, const std::wstring &name)
 {
-	auto lst = c->get<File_list_type> ("sorted-list");
+	auto fd = find_listed_entry (c, name);
 
-	if (lst != nullptr)
-	{
-		for (auto &fd : *lst)
-		{
-			if (std::wstring { fd.cFileName } == name)
-			{
-				return (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-			}
-		}
-	}
-
-	return false;
+	return fd != nullptr && (fd->dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 }
 
 // The question text of the delete confirmation: the files are named one by
@@ -2028,28 +2314,13 @@ bool FileList::handle_keydown (unsigned int key, int modifiers)
 	// inserting (operator[] on the map would silently add a zero-size rect)
 	auto list_size = get_client_area (path).height - 1;
 
-	if (modifiers & 1) // control
+	// The Ctrl function keys are commands of the func menu, not of the list
+	if (modifiers & 1)
 	{
-		if (key == VK_F3) // Name
-		{
-			auto sort_mode = get_sort_mode ();
-
-			if (*sort_mode == FileList::SORT_MODE_NAME || *sort_mode == FileList::SORT_MODE_REVERSE_NAME)
-			{
-				*sort_mode ^= 1;
-				current_context->erase ("sorted-list");
-			}
-			else
-			{
-				return false;
-			}
-		}
-		else
-		{
-			return false;
-		}
+		return false;
 	}
-	else if (key == VK_DOWN)
+
+	if (key == VK_DOWN)
 	{
 		(*idx)++;
 	}
@@ -2144,6 +2415,27 @@ bool FileList::handle_keydown (unsigned int key, int modifiers)
 		// Step to the next entry, so the repeated presses select the
 		// sequential files
 		(*idx)++;
+	}
+	else if (key == VK_MULTIPLY)
+	{
+		// Invert the mass selection: the directories leave it at once, the
+		// files flip their selected state
+		invert_selection (current_context);
+	}
+	else if (key == VK_ADD)
+	{
+		// The files matching the typed pattern join the selection; the
+		// modal draws over the panel, so no app redraw may follow it
+		show_regex_modal (current_display, true, L".+");
+		return true;
+	}
+	else if (key == VK_SUBTRACT)
+	{
+		// The selected entries matching the typed pattern leave the
+		// selection; the modal draws over the panel, so no app redraw may
+		// follow it
+		show_regex_modal (current_display, false, L".+");
+		return true;
 	}
 	else if (key == VK_TAB)
 	{

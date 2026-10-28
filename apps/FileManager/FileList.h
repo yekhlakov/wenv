@@ -95,6 +95,13 @@ void show_goto_modal (::Wenv::Display::Display *display, ::Wenv::Context *c);
 // modal does not show up when the list is empty
 void show_delete_file_modal (::Wenv::Display::Display *display, ::Wenv::Context *c, const std::vector<std::wstring> &files);
 
+// Set the sort mode of the given file list panel: the requested sort key (by
+// name, by last-write date or by size) becomes the active mode, or its
+// ascending/descending direction flips when the same key is already active.
+// The panel is redrawn, so the new order and the sort mode indication show up
+// right away
+void set_file_list_sort_mode (::Wenv::Context *c, int sort_mode);
+
 class FileList : public App
 {
 	// The per-parameter accessors to the current context (see the .cpp)
