@@ -155,11 +155,13 @@ void Window::blinker_loop ()
         {
             const Pos &cp = d->cursor_position;
 
+            // A small margin around the cell clears any anti-aliasing pixels
+            // the previous cursor phase may have left at its edges
             RECT cursor_rect
             {
-                cp.x * char_width,
+                cp.x * char_width - 1,
                 cp.y * char_height,
-                (cp.x + 1) * char_width,
+                (cp.x + 1) * char_width + 1,
                 (cp.y + 1) * char_height
             };
 
@@ -584,27 +586,76 @@ void Window::draw (HDC hdc, const RECT &update_rect) {
         current_bg = -1;
     }
 
-    // The text cursor: drawn as a bar of the default foreground color
-    // occupying the lower 1/8 of the character cell under the cursor, but only
-    // when it is visible, its blink phase is "on" and it lies inside the
-    // invalidated region
+    // The text cursor: in insert mode a bar of the default foreground color
+    // occupying the lower 1/8 of the character cell under the cursor, in
+    // overwrite mode the character under the cursor redrawn in the highlight
+    // variant of its color; drawn only when it is visible, its blink phase is
+    // "on" and it lies inside the invalidated region
     if (current_display->is_cursor_visible && current_display->cursor_blink)
     {
         const Pos &cp = current_display->cursor_position;
 
         if (cp.x >= first_col && cp.x < last_col && cp.y >= first_row && cp.y < last_row)
         {
-            RECT cursor_rect
+            if (current_display->is_cursor_overwrite)
             {
-                cp.x * char_width,
-                cp.y * char_height + char_height - char_height / 8,
-                (cp.x + 1) * char_width,
-                (cp.y + 1) * char_height
-            };
+                if (cp.y >= 0 && cp.y < (int) current_display->data.size ()
+                    && cp.x >= 0 && cp.x < (int) current_display->data[cp.y].size ())
+                {
+                    const Character &ch = current_display->data[cp.y][cp.x];
+                    auto entry = current_palette->get_entry (Palette::Default_color);
 
-            HBRUSH brush = CreateSolidBrush (current_palette->get_entry (Palette::Default_color).foreground_color);
-            FillRect (hdc, &cursor_rect, brush);
-            DeleteObject (brush);
+                    if (ch.palette_color != -1)
+                    {
+                        entry = current_palette->get_entry (ch.palette_color);
+                    }
+                    else
+                    {
+                        // The text drawn with a palette color stores the
+                        // resolved colors, so the entry it came from is found
+                        // by matching them
+                        for (auto &candidate : current_palette->colors)
+                        {
+                            if (candidate.foreground_color == ch.fg_color
+                                && candidate.background_color == ch.bg_color)
+                            {
+                                entry = candidate;
+                                break;
+                            }
+                        }
+                    }
+
+                    SetTextColor (hdc, entry.highlight_foreground_color);
+                    SetBkColor (hdc, entry.highlight_background_color);
+
+                    std::wstring text { ch.value };
+                    RECT cell_rect
+                    {
+                        cp.x * char_width,
+                        cp.y * char_height,
+                        (cp.x + 1) * char_width,
+                        (cp.y + 1) * char_height
+                    };
+
+                    // The glyph is clipped to its own cell, so the highlighted
+                    // cursor cannot leave pixels in the neighboring cells
+                    ExtTextOutW (hdc, cp.x * char_width, cp.y * char_height, ETO_OPAQUE | ETO_CLIPPED, &cell_rect, text.c_str (), 1, nullptr);
+                }
+            }
+            else
+            {
+                RECT cursor_rect
+                {
+                    cp.x * char_width,
+                    cp.y * char_height + char_height - char_height / 8,
+                    (cp.x + 1) * char_width,
+                    (cp.y + 1) * char_height
+                };
+
+                HBRUSH brush = CreateSolidBrush (current_palette->get_entry (Palette::Default_color).foreground_color);
+                FillRect (hdc, &cursor_rect, brush);
+                DeleteObject (brush);
+            }
         }
     }
 

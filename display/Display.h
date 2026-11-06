@@ -49,8 +49,11 @@ struct Display
 	::Wenv::Apps::App *focused_app = nullptr;
 	::Wenv::Context *focused_context = nullptr;
 
-	// The text cursor: its position in characters and its visibility
+	// The text cursor: its position in characters, its visibility and whether
+	// it is drawn as the whole cell in its highlight color variant (overwrite
+	// mode) or as a bar at the bottom of the cell (insert mode)
 	bool is_cursor_visible = true;
+	bool is_cursor_overwrite = false;
 	Pos cursor_position { 10, 10 };
 
 	// The current blink phase of the text cursor; toggled twice a second by

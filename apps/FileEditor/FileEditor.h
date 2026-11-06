@@ -27,8 +27,9 @@ void editor_exit (::Wenv::Display::Display *display, ::Wenv::Context *context);
 void editor_save (::Wenv::Display::Display *display, ::Wenv::Context *context);
 
 // The kind of the undo operation: removing a text range (reverting an
-// insertion) or inserting text back (reverting a removal)
-enum class UndoType { remove, insert };
+// insertion), inserting text back (reverting a removal) or putting the
+// original text back in place of the inserted one (reverting a replacement)
+enum class UndoType { remove, insert, replace };
 
 // A single undo operation: the action that reverts one editing input
 struct UndoOperation
@@ -48,6 +49,10 @@ struct UndoOperation
 	int line = 0;
 	int pos = 0;
 	std::string text;
+
+	// The replace operation: text holds the text inserted in the place and
+	// removed the original text it has replaced; neither spans several lines
+	std::string removed;
 };
 
 class FileEditor : public App
@@ -63,6 +68,7 @@ class FileEditor : public App
 	std::string * get_focused_path ();
 	std::vector<App *> * get_app_group ();
 	bool * get_is_editing ();
+	bool * get_overwrite_mode ();
 
 	// The unsaved changes flag shared with the status bar: true while the
 	// undo stack size differs from the size the file was saved with
@@ -97,6 +103,14 @@ class FileEditor : public App
 	// there is nothing to remove
 	bool delete_at_cursor (int *cursor_line, int *cursor_pos);
 
+	// Move the cursor to the first character of the nearest word to the left,
+	// continuing on the previous lines; stops at the beginning of the file
+	void move_word_left (int *cursor_line, int *cursor_pos);
+
+	// Move the cursor to the first character of the nearest word to the right,
+	// continuing on the next lines; stops at the end of the file
+	void move_word_right (int *cursor_line, int *cursor_pos);
+
 	// The undo stack of the current editing session: the operations that
 	// revert the inputs made so far, the most recent last
 	std::vector<UndoOperation> undo_stack;
@@ -116,9 +130,10 @@ class FileEditor : public App
 	// stack is empty
 	bool undo_last (int *cursor_line, int *cursor_pos);
 
-	// The apply functions of the two undo operation kinds
+	// The apply functions of the three undo operation kinds
 	void apply_undo_insert (const UndoOperation &op, int *cursor_line, int *cursor_pos);
 	void apply_undo_remove (const UndoOperation &op, int *cursor_line, int *cursor_pos);
+	void apply_undo_replace (const UndoOperation &op, int *cursor_line, int *cursor_pos);
 
 public:
 	FileEditor (const std::wstring &n) : App { n } {}

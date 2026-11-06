@@ -126,6 +126,7 @@ void ModalTextInput::redraw (const std::string &path)
 		// The text cursor stands in the box at its position within the text
 		current_display->cursor_position = { box_rect.x + 2 + *cursor - visible_begin, box_rect.y };
 		current_display->is_cursor_visible = true;
+		current_display->is_cursor_overwrite = false;
 	}
 }
 

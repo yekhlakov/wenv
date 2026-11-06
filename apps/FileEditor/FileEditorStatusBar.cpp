@@ -34,6 +34,7 @@ void FileEditorStatusBar::redraw (const std::string &path)
 	auto pwd = get_edit_pwd ();
 	auto file = get_file ();
 	auto is_editing = get_is_editing ();
+	auto overwrite_mode = get_overwrite_mode ();
 
 	if (target == nullptr || pwd == nullptr)
 	{
@@ -91,6 +92,7 @@ void FileEditorStatusBar::redraw (const std::string &path)
 				{ count_part, false },
 				{ L"  Col ", false },
 				{ std::format (L"{}", display_pos + 1), past_line_end },
+				{ *overwrite_mode ? L"  Ove" : L"  Ins", false },
 				{ std::format (L"  T{}", tab_width), false },
 				{ newline_part, false }
 			};
@@ -200,6 +202,12 @@ bool * FileEditorStatusBar::get_is_editing ()
 	// Default: a file that has just been opened is viewed, not edited. The
 	// state is set from outside (the file manager) when the file is shown
 	return current_context->get<bool> ("is_editing", [] () { return new bool { false }; });
+}
+
+bool * FileEditorStatusBar::get_overwrite_mode ()
+{
+	// Default: the insert mode, matching the editor
+	return current_context->get<bool> ("overwrite-mode", [] () { return new bool { false }; });
 }
 
 int * FileEditorStatusBar::get_file_top_line (const std::wstring &full_path)

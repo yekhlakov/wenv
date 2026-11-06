@@ -26,6 +26,11 @@ void toggle_editing_mode (::Wenv::Context *context)
 	auto is_editing = context->get<bool> ("is_editing", [] () { return new bool { false }; });
 
 	*is_editing = !*is_editing;
+
+	// Every switch between viewing and editing starts over in the insert mode
+	auto overwrite_mode = context->get<bool> ("overwrite-mode", [] () { return new bool { false }; });
+
+	*overwrite_mode = false;
 }
 
 void clear_undo (::Wenv::Context *context)
@@ -249,6 +254,7 @@ void FileEditor::redraw (const std::string &path)
 
 	// The editing mode state and the per-file cursor position
 	auto is_editing = get_is_editing ();
+	auto overwrite_mode = get_overwrite_mode ();
 	auto cursor_line = get_file_cursor_line (full_path);
 	auto cursor_pos = get_file_cursor_pos (full_path);
 
@@ -468,8 +474,10 @@ void FileEditor::redraw (const std::string &path)
 
 	// The text cursor is hidden in the viewing mode; in the editing mode it is
 	// shown at the position computed from the cursor position in the file and
-	// the currently visible portion of it
+	// the currently visible portion of it. The overwrite mode highlights the
+	// whole character under it
 	current_display->is_cursor_visible = *is_editing;
+	current_display->is_cursor_overwrite = *is_editing && *overwrite_mode;
 
 	if (*is_editing)
 	{
@@ -600,11 +608,27 @@ bool FileEditor::handle_keydown (unsigned int key, int modifiers)
 		}
 		else if (key == VK_LEFT)
 		{
-			(*cursor_pos)--;
+			// Ctrl+Left moves by words, plain Left moves by characters
+			if (modifiers & ctrl)
+			{
+				move_word_left (cursor_line, cursor_pos);
+			}
+			else
+			{
+				(*cursor_pos)--;
+			}
 		}
 		else if (key == VK_RIGHT)
 		{
-			(*cursor_pos)++;
+			// Ctrl+Right moves by words, plain Right moves by characters
+			if (modifiers & ctrl)
+			{
+				move_word_right (cursor_line, cursor_pos);
+			}
+			else
+			{
+				(*cursor_pos)++;
+			}
 		}
 		else if (key == VK_PRIOR)
 		{
@@ -644,6 +668,13 @@ bool FileEditor::handle_keydown (unsigned int key, int modifiers)
 			{
 				*cursor_pos = file_line_length (get_file (), *cursor_line);
 			}
+		}
+		else if (key == VK_INSERT)
+		{
+			// The Insert key switches between inserting and overwriting text
+			auto overwrite_mode = get_overwrite_mode ();
+
+			*overwrite_mode = !*overwrite_mode;
 		}
 		else if (key == VK_BACK)
 		{
@@ -735,6 +766,206 @@ static std::list<FileLine>::iterator line_iterator (File *file, int line)
 	return it;
 }
 
+// A character of a raw line: its byte offset and whether it is a word
+// character (a unicode letter or a digit)
+struct LineChar
+{
+	int pos;
+	bool word;
+};
+
+// True when the utf-8 character in the given byte range is a word character:
+// a unicode letter or a digit. The Windows character type table is used, so
+// the letters outside the ASCII range are recognized as well.
+static bool is_word_char (const std::string &raw, int pos, int length)
+{
+	auto text = maxy::strings::utf8towchar (raw.substr (pos, length));
+
+	if (text.empty ())
+	{
+		return false;
+	}
+
+	std::vector<WORD> types (text.size (), 0);
+
+	if (!GetStringTypeW (CT_CTYPE1, text.data (), (int) text.size (), types.data ()))
+	{
+		return false;
+	}
+
+	for (auto type : types)
+	{
+		if (type & (C1_ALPHA | C1_DIGIT))
+		{
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// Split the raw line into its characters, marking the word characters
+static std::vector<LineChar> line_chars (const std::string &raw)
+{
+	std::vector<LineChar> chars;
+
+	for (int pos = 0; pos < (int) raw.size (); )
+	{
+		auto length = utf8_char_length (raw[pos]);
+
+		chars.push_back ({ pos, is_word_char (raw, pos, length) });
+		pos += length;
+	}
+
+	return chars;
+}
+
+// The index of the character starting at or before the given raw position;
+// -1 when the position is before the first character
+static int char_index_at (const std::vector<LineChar> &chars, int pos)
+{
+	auto index = -1;
+
+	for (int i = 0; i < (int) chars.size () && chars[i].pos <= pos; i++)
+	{
+		index = i;
+	}
+
+	return index;
+}
+
+// The index of the first character of the word that contains the given
+// character index, which must be a word character
+static int word_start_index (const std::vector<LineChar> &chars, int index)
+{
+	while (index > 0 && chars[index - 1].word)
+	{
+		index--;
+	}
+
+	return index;
+}
+
+void FileEditor::move_word_left (int *cursor_line, int *cursor_pos)
+{
+	auto file = get_file ();
+
+	if (file == nullptr || file->lines.empty ())
+	{
+		return;
+	}
+
+	// The cursor is kept within the loaded content
+	*cursor_line = max (0, min (*cursor_line, (int) file->lines.size () - 1));
+
+	auto it = line_iterator (file, *cursor_line);
+	auto chars = line_chars (it->raw_data);
+
+	// The character just before the cursor: a cursor past the end of the
+	// line starts at its last character
+	auto index = char_index_at (chars, *cursor_pos - 1);
+
+	while (true)
+	{
+		// The nearest word character to the left
+		while (index >= 0 && !chars[index].word)
+		{
+			index--;
+		}
+
+		if (index >= 0)
+		{
+			// The cursor goes to the first character of the found word
+			*cursor_pos = chars[word_start_index (chars, index)].pos;
+			return;
+		}
+
+		// No word on this line: the search continues at the end of the
+		// previous line, stopping at the beginning of the file
+		if (*cursor_line == 0)
+		{
+			*cursor_pos = 0;
+			return;
+		}
+
+		(*cursor_line)--;
+		it = std::prev (it);
+		chars = line_chars (it->raw_data);
+		index = (int) chars.size () - 1;
+	}
+}
+
+void FileEditor::move_word_right (int *cursor_line, int *cursor_pos)
+{
+	auto file = get_file ();
+
+	if (file == nullptr || file->lines.empty ())
+	{
+		return;
+	}
+
+	// The cursor is kept within the loaded content
+	*cursor_line = max (0, min (*cursor_line, (int) file->lines.size () - 1));
+
+	auto it = line_iterator (file, *cursor_line);
+	auto pos = max (*cursor_pos, 0);
+
+	// The first line is searched from the cursor, the following ones from
+	// their beginning
+	bool from_cursor = true;
+
+	while (true)
+	{
+		auto chars = line_chars (it->raw_data);
+		auto raw_len = (int) it->raw_data.size ();
+
+		// The index the search starts at. The current word is skipped when
+		// the cursor is on one of its characters, so the next word is the
+		// one after it; a cursor past the line end has nothing to search.
+		auto start = 0;
+
+		if (from_cursor)
+		{
+			auto under = char_index_at (chars, pos);
+
+			if (pos >= raw_len)
+			{
+				start = (int) chars.size ();
+			}
+			else if (under >= 0 && chars[under].word)
+			{
+				start = under + 1;
+			}
+			else
+			{
+				start = max (under, 0);
+			}
+		}
+
+		// The first character of the nearest word to the right
+		for (int i = start; i < (int) chars.size (); i++)
+		{
+			if (chars[i].word && (i == 0 || !chars[i - 1].word))
+			{
+				*cursor_pos = chars[i].pos;
+				return;
+			}
+		}
+
+		// No word on this line: the search continues at the beginning of
+		// the next line, stopping at the end of the file
+		if (*cursor_line >= (int) file->lines.size () - 1)
+		{
+			*cursor_pos = raw_len;
+			return;
+		}
+
+		(*cursor_line)++;
+		it = std::next (it);
+		from_cursor = false;
+	}
+}
+
 void FileEditor::record_undo (UndoOperation op)
 {
 	// An edit made while the stack is below the saved state makes that
@@ -786,6 +1017,70 @@ bool FileEditor::insert_typed_char (unsigned int key, int modifiers, int *cursor
 	if (file == nullptr)
 	{
 		return false;
+	}
+
+	// The typed characters replace the characters under the cursor only in
+	// the overwrite mode, only when the cursor is on an existing line before
+	// its end (past the end the input appends, as in the insert mode) and
+	// only for plain characters (a newline is inserted rather than replaces)
+	auto overwrite = get_overwrite_mode ();
+	bool replaces = overwrite != nullptr && *overwrite
+		&& *cursor_line >= 0 && *cursor_line < (int) file->lines.size ()
+		&& *cursor_pos >= 0 && *cursor_pos < file_line_length (file, *cursor_line);
+
+	for (int i = 0; replaces && i < converted; i++)
+	{
+		if (chars[i] == L'\r' || chars[i] == L'\n')
+		{
+			replaces = false;
+		}
+	}
+
+	if (replaces)
+	{
+		auto replace_line = *cursor_line;
+		auto replace_pos = *cursor_pos;
+		auto it = line_iterator (file, replace_line);
+
+		// All the characters typed by this keypress form one replacement:
+		// each character takes the place of the character under the cursor,
+		// and the extra ones (typed past the line end) are just appended
+		std::string inserted;
+		std::string removed;
+
+		for (int i = 0; i < converted; i++)
+		{
+			auto utf8 = maxy::strings::wchartoutf8 (std::wstring { chars[i] });
+			auto pos = (size_t) *cursor_pos;
+
+			if (pos < it->raw_data.size ())
+			{
+				auto length = utf8_char_length (it->raw_data[pos]);
+
+				removed += it->raw_data.substr (pos, length);
+				it->raw_data.erase (pos, length);
+			}
+
+			it->raw_data.insert (pos, utf8);
+			inserted += utf8;
+			*cursor_pos = (int) pos + (int) utf8.size ();
+		}
+
+		// The edited line may have become the longest one
+		file->measure (*it);
+
+		// The undo puts the replaced characters back in place of the inserted
+		// ones
+		record_undo
+		({
+			.type = UndoType::replace,
+			.line = replace_line,
+			.pos = replace_pos,
+			.text = inserted,
+			.removed = removed
+		});
+
+		return true;
 	}
 
 	// The beginning of the inserted text in the unmodified file: the old end
@@ -1067,6 +1362,10 @@ bool FileEditor::undo_last (int *cursor_line, int *cursor_pos)
 	{
 		apply_undo_insert (op, cursor_line, cursor_pos);
 	}
+	else if (op.type == UndoType::replace)
+	{
+		apply_undo_replace (op, cursor_line, cursor_pos);
+	}
 	else
 	{
 		apply_undo_remove (op, cursor_line, cursor_pos);
@@ -1196,6 +1495,32 @@ void FileEditor::apply_undo_remove (const UndoOperation &op, int *cursor_line, i
 	// The cursor is placed at the beginning of the removed range
 	*cursor_line = start_line;
 	*cursor_pos = start_pos;
+}
+
+void FileEditor::apply_undo_replace (const UndoOperation &op, int *cursor_line, int *cursor_pos)
+{
+	auto file = get_file ();
+
+	if (file == nullptr || op.line < 0 || op.line >= (int) file->lines.size ())
+	{
+		return;
+	}
+
+	auto it = line_iterator (file, op.line);
+	auto place = (size_t) max (0, min (op.pos, (int) it->raw_data.size ()));
+	auto inserted_length = min ((int) op.text.size (), (int) it->raw_data.size () - (int) place);
+
+	// The inserted text is removed and the original text is put back in its
+	// place
+	it->raw_data.erase (place, inserted_length);
+	it->raw_data.insert (place, op.removed);
+
+	// The line may have become the longest one
+	file->measure (*it);
+
+	// The cursor is placed at the beginning of the replacement
+	*cursor_line = op.line;
+	*cursor_pos = (int) place;
 }
 
 void FileEditor::save_changes ()
@@ -1348,6 +1673,13 @@ bool * FileEditor::get_is_editing ()
 	// Default: a file that has just been opened is viewed, not edited. The
 	// state is set from outside (the file manager or the F6 command)
 	return current_context->get<bool> ("is_editing", [] () { return new bool { false }; });
+}
+
+bool * FileEditor::get_overwrite_mode ()
+{
+	// Default: the insert mode. The state is reset whenever a file is opened
+	// for editing or the editing mode is toggled
+	return current_context->get<bool> ("overwrite-mode", [] () { return new bool { false }; });
 }
 
 bool * FileEditor::get_pending_changes ()

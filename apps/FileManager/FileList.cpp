@@ -387,6 +387,9 @@ static void open_named_file (::Wenv::Display::Display *display, ::Wenv::Context 
 	ctx->set ("edit-pwd", new std::wstring { *pwd });
 	ctx->set ("is_editing", new bool { is_editing });
 
+	// A newly opened file starts in the insert mode
+	ctx->set ("overwrite-mode", new bool { false });
+
 	display->window->set_display ("file-editor");
 }
 
