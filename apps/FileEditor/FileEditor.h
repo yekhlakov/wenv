@@ -55,6 +55,18 @@ struct UndoOperation
 	std::string removed;
 };
 
+// A range of the selected file characters: from (start_line, start_pos)
+// inclusive to (end_line, end_pos) exclusive, the same coordinates the
+// removal undo operations use; while the range is being made the end may
+// precede the beginning, which selects nothing
+struct SelectedRange
+{
+	int start_line = 0;
+	int start_pos = 0;
+	int end_line = 0;
+	int end_pos = 0;
+};
+
 class FileEditor : public App
 {
 	// The per-parameter accessors to the current context. They keep the
@@ -135,12 +147,56 @@ class FileEditor : public App
 	void apply_undo_remove (const UndoOperation &op, int *cursor_line, int *cursor_pos);
 	void apply_undo_replace (const UndoOperation &op, int *cursor_line, int *cursor_pos);
 
+	// The selected character ranges of the file; the keyboard and the mouse
+	// manipulate the first one of the list
+	std::vector<SelectedRange> selected_ranges;
+
+	// True while no keyboard selection is in progress: the next
+	// shift-assisted cursor movement drops the first range and starts a new
+	// one instead of moving the ends of it
+	bool selection_finalized = true;
+
+	// True while the mouse drag selection is in progress: the left button
+	// went down on a character and has not been released yet
+	bool mouse_selecting = false;
+
+	// The character the drag selection has started on: the far end of the
+	// selection, the other one follows the mouse
+	int drag_anchor_line = 0;
+	int drag_anchor_pos = 0;
+
+	// Account for a cursor movement from the old position to the new one
+	// made with the shift key down: the ends of the selection in progress
+	// follow the cursor, the finished one is replaced by a new range
+	void extend_selection (int old_line, int old_pos, int new_line, int new_pos);
+
+	// Finish the keyboard selection: the shift key has been released; an
+	// empty first range selects nothing and is dropped
+	void finalize_selection ();
+
+	// Begin the mouse drag selection: the character under the given position
+	// becomes the anchor end of the selection, its other end follows the
+	// subsequent drags; no range is created until the drag moves
+	void begin_mouse_drag (int *top, int *left, int tab_width, ::Wenv::Display::Pos position);
+
+	// The common reaction of the viewer and the editor to the plain press
+	// of the left mouse button on a character: the finished selection is
+	// cleared by it, the empty one is started as the drag selection; a
+	// keyboard selection still in progress is left alone. Returns false
+	// when the press changes nothing (the shift-assisted one is not
+	// answered here at all)
+	bool mouse_press_selection (int modifiers, int *top, int *left, int tab_width, ::Wenv::Display::Pos position);
+
 public:
 	FileEditor (const std::wstring &n) : App { n } {}
 
 	// Drop the undo operations of the editing session, which also resets
 	// the saved state marker: a fresh session starts over an unedited file
 	void clear_undo () { undo_stack.clear (); saved_undo_stack_size = 0; update_pending_changes (); }
+
+	// Forget the selection: used when a new file is opened and when the
+	// current one is closed
+	void clear_selection () { selected_ranges.clear (); selection_finalized = true; mouse_selecting = false; }
 
 	// Discard all the changes of the session by applying the whole undo
 	// stack, emptying it in the process
@@ -159,6 +215,8 @@ public:
 	virtual void redraw (const std::string &path) override;
 	virtual bool handle_click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers) override;
 	virtual bool handle_keydown (unsigned int key, int modifiers) override;
+	virtual bool handle_keyup (unsigned int key, int modifiers) override;
+	virtual bool handle_mouse_drag (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers) override;
 
 	void redraw_all (const std::string &path);
 };

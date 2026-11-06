@@ -135,6 +135,36 @@ void Window::handle_mousemove (WPARAM wParam, LPARAM lParam)
 {
 	mouse_x = LOWORD (lParam);
 	mouse_y = HIWORD (lParam);
+
+	// The moves with the left button held down are the drags: they are
+	// forwarded to the focused app of the current display, the app that
+	// could have started the drag with the button press
+	if ((wParam & MK_LBUTTON) && current_display != nullptr && char_width > 0 && char_height > 0)
+	{
+		// Modifier state: 1 = Ctrl, 2 = Shift, 4 = Alt (the same encoding
+		// the mouse clicks use)
+		int mods = 0;
+
+		if (wParam & MK_CONTROL)
+		{
+			mods |= 1;
+		}
+		if (wParam & MK_SHIFT)
+		{
+			mods |= 2;
+		}
+		if (key_state[VK_MENU])
+		{
+			mods |= 4;
+		}
+
+		if (current_display->handle_mouse_move (mouse_x / char_width, mouse_y / char_height, mods))
+		{
+			invalidate_modified ();
+			return;
+		}
+	}
+
 	invalidate_modified ();
 }
 

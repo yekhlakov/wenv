@@ -49,6 +49,13 @@ public:
 	// the click changed the app state and a redraw of the app is needed
 	virtual bool handle_click (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers) { return false; }
 
+	// The core calls this function while the user moves the mouse with the
+	// left button held down (a drag). The event goes to the focused app of
+	// the display; the position is relative to the client area top-left and
+	// may lie outside of it when the drag has left the area. Returns true
+	// when the drag changed the app state and a redraw is needed
+	virtual bool handle_mouse_drag (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers) { return false; }
+
 	// The core calls this function when the user presses a key AND the app is in
 	// focus. Returns false when the event was a no-op; true when it changed the
 	// app state and a redraw of the app is needed

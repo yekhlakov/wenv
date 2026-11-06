@@ -125,4 +125,33 @@ bool Display::handle_mouse_click (int x, int y, int modifiers)
 	return handled;
 }
 
+// Handle a mouse move with the left button down (a drag): the event goes to
+// the focused app of the current layout, the app that could have started
+// the drag with the button press; the app ignores the moves unless a drag
+// of its own is in progress. While a modal is visible the drags do not
+// reach the apps underneath. Returns true when an app handled the drag (the
+// caller invalidates the modified characters)
+bool Display::handle_mouse_move (int x, int y, int modifiers)
+{
+	if (current_modal != nullptr || focused_context == nullptr)
+	{
+		return false;
+	}
+
+	auto focused_app = focused_context->get<::Wenv::Apps::App> ("focused-app");
+	auto path = focused_context->get<std::string> ("focused-path");
+
+	if (focused_app == nullptr || path == nullptr)
+	{
+		return false;
+	}
+
+	// The position of the mouse within the focused app's client area; it
+	// may lie outside of it when the drag has left the area
+	auto area = focused_app->get_client_area (*path);
+	Pos position { x - area.x, y - area.y };
+
+	return focused_app->with_context (focused_context)->handle_mouse_drag (area, position, modifiers);
+}
+
 } // namespace Wenv::Display

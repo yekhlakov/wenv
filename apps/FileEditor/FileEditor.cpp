@@ -169,6 +169,15 @@ void editor_exit (::Wenv::Display::Display *display, ::Wenv::Context *context)
 	// editor display is closed
 	clear_undo (context);
 
+	// The selection is not kept across the closed files: opening the file
+	// again starts with none
+	auto editor = get_editor_app (display);
+
+	if (editor != nullptr)
+	{
+		editor->clear_selection ();
+	}
+
 	if (display == nullptr || display->window == nullptr)
 	{
 		return;
@@ -192,6 +201,109 @@ void editor_save (::Wenv::Display::Display *display, ::Wenv::Context *context)
 	{
 		editor->save_changes ();
 	}
+}
+
+// The lexicographic order of the (line, pos) positions of the file
+static bool pos_less (int line_a, int pos_a, int line_b, int pos_b)
+{
+	return line_a != line_b ? line_a < line_b : pos_a < pos_b;
+}
+
+// Overdraw the characters of the given line covered by the selected range
+// with the selected color variant of each character color: the text keeps
+// its default color, the tab arrows and the trailing space dots keep their
+// dark one. The range may point in either direction (the end may precede
+// the beginning while the selection is being made), so the covered band is
+// taken between its outermost positions. The default color is restored
+// before returning
+static void draw_selected_band (
+	::Wenv::Display::Display *display,
+	const ::Wenv::Display::Rect &area,
+	int row_y,
+	int left,
+	File *file,
+	int line,
+	const std::wstring &expanded,
+	const std::vector<std::pair<int, int>> &tab_spans,
+	int tab_width,
+	int trailing_start,
+	const SelectedRange &range)
+{
+	// The range oriented from the earlier position to the later one
+	auto from_line = range.start_line;
+	auto from_pos = range.start_pos;
+	auto to_line = range.end_line;
+	auto to_pos = range.end_pos;
+
+	if (pos_less (to_line, to_pos, from_line, from_pos))
+	{
+		std::swap (from_line, to_line);
+		std::swap (from_pos, to_pos);
+	}
+
+	// The line carries no part of the range
+	if (line < from_line || line > to_line)
+	{
+		return;
+	}
+
+	// The part of the range falling on this line, in the display columns of
+	// the tab-expanded text; a line between the range ends is covered whole
+	auto band_from = from_line == line ? file_line_display_pos (file, line, from_pos, tab_width) : 0;
+	auto band_to = to_line == line ? file_line_display_pos (file, line, to_pos, tab_width) : (int) expanded.size ();
+
+	// Only the part visible in the viewport is drawn, and only where the
+	// line has characters (the selected newlines have nothing to show on)
+	auto from = max (band_from, left);
+	auto to = min (band_to, left + area.width);
+	auto text_to = min (to, (int) expanded.size ());
+
+	if (text_to <= from)
+	{
+		return;
+	}
+
+	// The characters are printed again in the selected variant of their own
+	// color; the spaces the expansion of the selected tabs consists of are
+	// drawn over as well
+	display->with_color (::Wenv::Display::Palette::Default_color, ::Wenv::Display::Palette::Variant_selected);
+
+	::Wenv::Display::Rect band
+	{
+		area.x + from - left,
+		row_y,
+		text_to - from,
+		1
+	};
+
+	display->print_line
+	(
+		band,
+		expanded.substr (from, text_to - from),
+		display->PF_TOP | display->PF_LEFT | display->PF_ERASE_BACKGROUND
+	);
+
+	// The tab arrows and the trailing space dots within the band keep their
+	// dark color (in its selected variant)
+	display->with_color (::Wenv::Display::Palette::Dark_element_color, ::Wenv::Display::Palette::Variant_selected);
+
+	for (const auto &[pos, len] : tab_spans)
+	{
+		if (pos >= from && pos < text_to)
+		{
+			display->print_char (area.x + pos - left, row_y, L'\u2192');
+		}
+	}
+
+	if (trailing_start >= 0)
+	{
+		for (int col = max (from, trailing_start); col < text_to; col++)
+		{
+			display->print_char (area.x + col - left, row_y, L'\u00B7');
+		}
+	}
+
+	display->with_color (::Wenv::Display::Palette::Default_color);
 }
 
 void FileEditor::draw (::Wenv::Display::Display &display, const std::string &path, ::Wenv::Display::Rect client_area)
@@ -225,6 +337,10 @@ void FileEditor::redraw (const std::string &path)
 
 		current_context->set ("file", file);
 		current_context->set ("viewed-path", new std::wstring { full_path });
+
+		// The selection is not kept across the opened files, but survives
+		// the switches between the viewing and the editing modes
+		clear_selection ();
 	}
 
 	// The tab width is a persistent setting, shared by the editor and its
@@ -372,13 +488,17 @@ void FileEditor::redraw (const std::string &path)
 
 		bool drew_dark = false;
 
+		// The display column the trailing spaces of the line start at; -1
+		// when the line has none (the dots are drawn for them)
+		int trailing_start = -1;
+
 		// Draw trailing spaces as middle dots
 		if (!expanded.empty ())
 		{
 			auto last_non_space = expanded.find_last_not_of (L' ');
 
 			// An all-whitespace line is all trailing spaces
-			int trailing_start = last_non_space == std::wstring::npos ? 0 : (int) last_non_space + 1;
+			trailing_start = last_non_space == std::wstring::npos ? 0 : (int) last_non_space + 1;
 			int trailing_count = (int) expanded.size () - trailing_start;
 
 			if (trailing_count > 0)
@@ -470,6 +590,13 @@ void FileEditor::redraw (const std::string &path)
 			// Return the default color if we've changed it to some other color previously
 			current_display->with_color (::Wenv::Display::Palette::Default_color);
 		}
+
+		// The characters covered by the selected ranges are drawn over with
+		// the selected variants of their own colors
+		for (const auto &range : selected_ranges)
+		{
+			draw_selected_band (current_display, area, r.y, *left, file, ln - 1, expanded, tab_spans, tab_width, trailing_start, range);
+		}
 	}
 
 	// The text cursor is hidden in the viewing mode; in the editing mode it is
@@ -503,12 +630,6 @@ bool FileEditor::handle_click (::Wenv::Display::Rect client_area, ::Wenv::Displa
 		return false;
 	}
 
-	// The cursor is only moved in the editing mode
-	if (!*get_is_editing ())
-	{
-		return false;
-	}
-
 	auto full_path = get_full_path ();
 
 	if (full_path.empty ())
@@ -524,14 +645,46 @@ bool FileEditor::handle_click (::Wenv::Display::Rect client_area, ::Wenv::Displa
 	auto left = get_file_left_column (full_path);
 	auto tab_width = *get_tab_width (current_display->get_persistent_context ());
 
+	// The viewing mode has no cursor to move: the mouse press is answered
+	// by the selection reaction only
+	if (!*get_is_editing ())
+	{
+		auto handled = mouse_press_selection (modifiers, top, left, tab_width, position);
+
+		if (handled)
+		{
+			redraw_all (*get_focused_path ());
+		}
+
+		return handled;
+	}
+
 	auto line = *top + position.y;
 	auto column = *left + position.x;
+
+	// The plain press makes its common selection changes; the shift one is
+	// answered by the extension below. The cursor is moved as usual in the
+	// either case
+	mouse_press_selection (modifiers, top, left, tab_width, position);
+
+	// The modifier flag of the shift key (see Window::current_mods)
+	constexpr int shift = 2;
 
 	auto cursor_line = get_file_cursor_line (full_path);
 	auto cursor_pos = get_file_cursor_pos (full_path);
 
+	// The place the cursor moves from: with the shift key down it becomes
+	// the second end of the extended selection
+	auto old_line = *cursor_line;
+	auto old_pos = *cursor_pos;
+
 	*cursor_line = line;
 	*cursor_pos = file_line_raw_pos (get_file (), line, column, tab_width);
+
+	if (modifiers & shift)
+	{
+		extend_selection (old_line, old_pos, *cursor_line, *cursor_pos);
+	}
 
 	// The redraw updates the cursor position of the display and marks the
 	// characters modified, so the cursor is actually repainted at the new
@@ -566,6 +719,9 @@ bool FileEditor::handle_keydown (unsigned int key, int modifiers)
 	// The modifier flag of the control key (see Window::current_mods)
 	constexpr int ctrl = 1;
 
+	// The modifier flag of the shift key (see Window::current_mods)
+	constexpr int shift = 2;
+
 	// The Escape key is owned by the editor: it closes the editor unless
 	// it is editing a file with unsaved changes, which cannot be lost by
 	// an accidental keypress
@@ -585,6 +741,16 @@ bool FileEditor::handle_keydown (unsigned int key, int modifiers)
 		// of the file, the viewport follows its display position
 		auto cursor_line = get_file_cursor_line (full_path);
 		auto cursor_pos = get_file_cursor_pos (full_path);
+
+		// The place the cursor moves from: with the shift key down it is
+		// one of the ends of the extended selection
+		auto old_line = *cursor_line;
+		auto old_pos = *cursor_pos;
+
+		// The keys that move the cursor: the shift-assisted ones extend the
+		// selection
+		bool moves_cursor = key == VK_UP || key == VK_DOWN || key == VK_LEFT || key == VK_RIGHT
+			|| key == VK_PRIOR || key == VK_NEXT || key == VK_HOME || key == VK_END;
 
 		// The movement keys always succeed; the text editing keys report
 		// whether they actually changed anything
@@ -718,6 +884,13 @@ bool FileEditor::handle_keydown (unsigned int key, int modifiers)
 		// The cursor cannot go beyond the first line and its first position
 		*cursor_line = max (*cursor_line, 0);
 		*cursor_pos = max (*cursor_pos, 0);
+
+		// The shift-assisted cursor movement extends the selection; the
+		// movement without the shift key leaves the selection alone
+		if (moves_cursor && (modifiers & shift))
+		{
+			extend_selection (old_line, old_pos, *cursor_line, *cursor_pos);
+		}
 	}
 	else
 	{
@@ -754,6 +927,202 @@ bool FileEditor::handle_keydown (unsigned int key, int modifiers)
 
 	// The offsets are clamped to the content bounds during redraw
 	redraw_all (path);
+
+	return true;
+}
+
+bool FileEditor::handle_keyup (unsigned int key, int modifiers)
+{
+	// The released shift key finishes the keyboard selection: the next
+	// shift-assisted movement starts a new range instead of moving the ends
+	// of this one
+	if (key == VK_SHIFT && !selected_ranges.empty ())
+	{
+		finalize_selection ();
+
+		// The finalized range may have been dropped
+		return true;
+	}
+
+	// The released left mouse button finishes the drag selection started by
+	// its press, the same way the released shift key finishes the keyboard
+	// one
+	if (key == VK_LBUTTON && mouse_selecting)
+	{
+		mouse_selecting = false;
+		finalize_selection ();
+
+		// The finalized range may have been dropped
+		return true;
+	}
+
+	return false;
+}
+
+void FileEditor::extend_selection (int old_line, int old_pos, int new_line, int new_pos)
+{
+	// The selection in progress keeps being made: the end the cursor sits
+	// on follows the movement
+	bool keeps_making = !selection_finalized && !selected_ranges.empty ();
+
+	if (keeps_making)
+	{
+		auto &first = selected_ranges.front ();
+
+		if (old_line == first.start_line && old_pos == first.start_pos)
+		{
+			// The cursor sits on the beginning of the range
+			first.start_line = new_line;
+			first.start_pos = new_pos;
+		}
+		else if (old_line == first.end_line && old_pos == first.end_pos)
+		{
+			// The cursor sits just past the end of the range
+			first.end_line = new_line;
+			first.end_pos = new_pos;
+		}
+		else
+		{
+			// The cursor has lost the range, which cannot normally happen
+			// while the selection is in progress: a new one is started
+			keeps_making = false;
+		}
+	}
+
+	if (!keeps_making)
+	{
+		// The previous selection is replaced: the new range spans the
+		// characters the movement has passed over
+		if (!selected_ranges.empty ())
+		{
+			selected_ranges.erase (selected_ranges.begin ());
+		}
+
+		selection_finalized = false;
+
+		selected_ranges.insert (selected_ranges.begin (), pos_less (new_line, new_pos, old_line, old_pos)
+			? SelectedRange { new_line, new_pos, old_line, old_pos }
+			: SelectedRange { old_line, old_pos, new_line, new_pos });
+	}
+}
+
+void FileEditor::finalize_selection ()
+{
+	selection_finalized = true;
+
+	// An empty range selects nothing: it is dropped from the list
+	if (!selected_ranges.empty ())
+	{
+		auto &first = selected_ranges.front ();
+
+		if (pos_less (first.end_line, first.end_pos, first.start_line, first.start_pos))
+		{
+			selected_ranges.erase (selected_ranges.begin ());
+		}
+	}
+}
+
+void FileEditor::begin_mouse_drag (int *top, int *left, int tab_width, ::Wenv::Display::Pos position)
+{
+	auto line = *top + position.y;
+	auto column = *left + position.x;
+
+	mouse_selecting = true;
+	drag_anchor_line = line;
+	drag_anchor_pos = file_line_raw_pos (get_file (), line, column, tab_width);
+}
+
+bool FileEditor::mouse_press_selection (int modifiers, int *top, int *left, int tab_width, ::Wenv::Display::Pos position)
+{
+	// The modifier flag of the shift key (see Window::current_mods)
+	constexpr int shift = 2;
+
+	// The shift-assisted press is not answered here: in the editing mode it
+	// extends the selection the usual way, in the viewing mode there is no
+	// cursor to extend from
+	if (modifiers & shift)
+	{
+		return false;
+	}
+
+	if (!selected_ranges.empty () && selection_finalized)
+	{
+		// The click clears the finished selection; the drag that may follow
+		// it creates a new one starting from the pressed character
+		clear_selection ();
+		begin_mouse_drag (top, left, tab_width, position);
+
+		return true;
+	}
+
+	if (selected_ranges.empty ())
+	{
+		// The press starts the drag selection with the single character
+		// under the mouse
+		begin_mouse_drag (top, left, tab_width, position);
+		selected_ranges.push_back ({ drag_anchor_line, drag_anchor_pos, drag_anchor_line, drag_anchor_pos + 1 });
+
+		return true;
+	}
+
+	// The keyboard selection still in progress is left alone
+	return false;
+}
+
+bool FileEditor::handle_mouse_drag (::Wenv::Display::Rect client_area, ::Wenv::Display::Pos position, int modifiers)
+{
+	// Only the drag started by the own press of the left button is answered
+	if (!mouse_selecting || current_context == nullptr)
+	{
+		return false;
+	}
+
+	auto full_path = get_full_path ();
+
+	if (full_path.empty ())
+	{
+		return false;
+	}
+
+	auto top = get_file_top_line (full_path);
+	auto left = get_file_left_column (full_path);
+	auto tab_width = *get_tab_width (current_display->get_persistent_context ());
+
+	auto line = *top + position.y;
+	auto column = *left + position.x;
+	auto pos = file_line_raw_pos (get_file (), line, column, tab_width);
+
+	// The selection spans the characters from the anchor one to the one
+	// under the mouse; when the mouse has moved before the anchor, the far
+	// end of the range becomes its beginning
+	SelectedRange range = pos_less (line, pos, drag_anchor_line, drag_anchor_pos)
+		? SelectedRange { line, pos, drag_anchor_line, drag_anchor_pos + 1 }
+		: SelectedRange { drag_anchor_line, drag_anchor_pos, line, pos + 1 };
+
+	// The first movement of the drag that has started by clearing the
+	// finished selection creates the range, the following ones move its
+	// mouse end
+	if (selected_ranges.empty ())
+	{
+		selected_ranges.push_back (range);
+	}
+	else
+	{
+		selected_ranges[0] = range;
+	}
+
+	// In the editing mode the cursor follows the mouse as well
+	if (*get_is_editing ())
+	{
+		auto cursor_line = get_file_cursor_line (full_path);
+		auto cursor_pos = get_file_cursor_pos (full_path);
+
+		*cursor_line = line;
+		*cursor_pos = pos;
+	}
+
+	// The redraw shows the moved end of the selection band
+	redraw_all (*get_focused_path ());
 
 	return true;
 }

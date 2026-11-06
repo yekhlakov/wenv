@@ -114,6 +114,11 @@ struct Display
 	// handled the click (the caller invalidates the modified characters)
 	bool handle_mouse_click (int x, int y, int modifiers);
 
+	// Handle a mouse move with the left button down (a drag): the event
+	// goes to the focused app, which ignores it unless a drag of its own is
+	// in progress. Returns true when an app handled the drag
+	bool handle_mouse_move (int x, int y, int modifiers);
+
 	// Find the app (and its client area) the given point falls into within the
 	// given grid, recursing into nested grids. Empty when the point hits no app
 	// (a border or the space between blocks)
@@ -127,7 +132,11 @@ struct Display
 
 
 	Display *with_palette (Palette *p);
-	Display *with_color (const std::string &n, bool is_highlight = false);
+
+	// Set the drawing colors from the named palette entry; the variant is
+	// one of the Palette::Variant_... constants (true and false are accepted
+	// for the highlighted and the regular one respectively)
+	Display *with_color (const std::string &n, int variant = Palette::Variant_regular);
 
 	// OUTPUT
 

@@ -20,8 +20,8 @@ Display *Display::with_palette (Palette *p)
 }
 
 // Set the foreground and background drawing colors from the named palette
-// entry; the highlight variant of the entry is used when requested
-Display *Display::with_color (const std::string &n, bool is_highlight)
+// entry; the variant of the entry colors is used as requested
+Display *Display::with_color (const std::string &n, int variant)
 {
 	if (current_palette != nullptr)
 	{
@@ -29,10 +29,15 @@ Display *Display::with_color (const std::string &n, bool is_highlight)
 
 		current_palette_color = -1;
 
-		if (is_highlight)
+		if (variant == Palette::Variant_highlight)
 		{
 			current_foreground_color = e.highlight_foreground_color;
 			current_background_color = e.highlight_background_color;
+		}
+		else if (variant == Palette::Variant_selected)
+		{
+			current_foreground_color = e.selected_foreground_color;
+			current_background_color = e.selected_background_color;
 		}
 		else
 		{
