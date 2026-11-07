@@ -735,6 +735,26 @@ bool FileEditor::handle_keydown (unsigned int key, int modifiers)
 		return true;
 	}
 
+	// The clipboard keys copy the selected text in both modes; the cut in
+	// the editing mode also removes the selected fragment, the same way the
+	// Delete key does
+	if ((modifiers & ctrl) && (key == 'C' || key == 'X') && copy_selection ())
+	{
+		if (key == 'X' && *is_editing)
+		{
+			auto cursor_line = get_file_cursor_line (full_path);
+			auto cursor_pos = get_file_cursor_pos (full_path);
+
+			delete_selection (cursor_line, cursor_pos);
+			update_pending_changes ();
+		}
+
+		// The redraw shows the selection consumed by the cut
+		redraw_all (path);
+
+		return true;
+	}
+
 	if (*is_editing)
 	{
 		// The editing mode: the keys move the cursor in the raw coordinates
@@ -844,24 +864,35 @@ bool FileEditor::handle_keydown (unsigned int key, int modifiers)
 		}
 		else if (key == VK_BACK)
 		{
-			// Backspace removes the character just before the cursor
-			handled = backspace_at_cursor (cursor_line, cursor_pos);
+			// Backspace removes the whole selection when there is one,
+			// otherwise the character just before the cursor
+			handled = delete_selection (cursor_line, cursor_pos)
+				|| backspace_at_cursor (cursor_line, cursor_pos);
 		}
 		else if (key == VK_DELETE)
 		{
-			// Delete removes the character at the cursor
-			handled = delete_at_cursor (cursor_line, cursor_pos);
+			// Delete removes the whole selection when there is one,
+			// otherwise the character at the cursor
+			handled = delete_selection (cursor_line, cursor_pos)
+				|| delete_at_cursor (cursor_line, cursor_pos);
 		}
 		else if (key == 'Z' && (modifiers & ctrl))
 		{
 			// Ctrl+Z applies and drops the last undo operation
 			handled = undo_last (cursor_line, cursor_pos);
 		}
+		else if (key == 'V' && (modifiers & ctrl))
+		{
+			// Ctrl+V pastes the clipboard text: in place of the selection
+			// when there is one, at the cursor place otherwise
+			handled = paste_clipboard (cursor_line, cursor_pos);
+		}
 		else
 		{
-			// A regular keypress: convert the key to its unicode character
-			// and insert it into the text at the cursor position
-			handled = insert_typed_char (key, modifiers, cursor_line, cursor_pos);
+			// A regular keypress: it replaces the selection when there is
+			// one, otherwise it is inserted at the cursor position
+			handled = replace_selection (key, modifiers, cursor_line, cursor_pos)
+				|| insert_typed_char (key, modifiers, cursor_line, cursor_pos);
 		}
 
 		// A no-op text editing key is reported as unhandled
@@ -1354,7 +1385,10 @@ static bool is_utf8_continuation (char byte)
 	return ((unsigned char) byte & 0xC0) == 0x80;
 }
 
-bool FileEditor::insert_typed_char (unsigned int key, int modifiers, int *cursor_line, int *cursor_pos)
+// The unicode characters produced by the typed key (at most eight of them);
+// false for the keys producing no text: the shortcuts with ctrl or alt held
+// and the dead keys
+static bool typed_chars (unsigned int key, int modifiers, wchar_t *chars, int *converted)
 {
 	// Keys with ctrl or alt held are shortcuts, not text input
 	constexpr int ctrl = 1;
@@ -1372,18 +1406,21 @@ bool FileEditor::insert_typed_char (unsigned int key, int modifiers, int *cursor
 		keys[VK_SHIFT] = 0x80;
 	}
 
-	wchar_t chars[8] = {};
-	auto converted = ToUnicode (key, 0, keys, chars, (int) std::size (chars), 0);
-
 	// Zero characters for keys that produce no text, negative for dead keys
-	if (converted <= 0)
-	{
-		return false;
-	}
+	*converted = (int) ToUnicode (key, 0, keys, chars, 8, 0);
+
+	return *converted > 0;
+}
+
+bool FileEditor::insert_typed_char (unsigned int key, int modifiers, int *cursor_line, int *cursor_pos)
+{
+	// The typed characters of the key
+	wchar_t chars[8] = {};
+	auto converted = 0;
 
 	auto file = get_file ();
 
-	if (file == nullptr)
+	if (file == nullptr || !typed_chars (key, modifiers, chars, &converted))
 	{
 		return false;
 	}
@@ -1513,7 +1550,7 @@ bool FileEditor::insert_typed_char (unsigned int key, int modifiers, int *cursor
 			it->raw_data.resize (split);
 			it->newline = file->newline;
 
-			it = file->lines.insert (std::next (it), { tail, tail_newline });
+			it = file->lines.insert (std::next (it), FileLine { tail, tail_newline });
 
 			(*cursor_line)++;
 			*cursor_pos = 0;
@@ -1717,6 +1754,482 @@ bool FileEditor::delete_at_cursor (int *cursor_line, int *cursor_pos)
 	return false;
 }
 
+// The utf-8 text to the windows clipboard as CF_UNICODETEXT: the content is
+// widened and its \n separators are replaced with the \r\n the clipboard
+// format uses
+static bool copy_to_clipboard (HWND window, const std::string &utf8)
+{
+	// The clipboard text: the widened content with the CRLF separators
+	std::wstring text;
+
+	for (auto ch : maxy::strings::utf8towchar (utf8))
+	{
+		if (ch == L'\n')
+		{
+			text += L'\r';
+		}
+
+		text += ch;
+	}
+
+	// The clipboard serves a single opener at a time: the failure leaves
+	// the previous content in place
+	if (!OpenClipboard (window))
+	{
+		return false;
+	}
+
+	auto copied = false;
+	auto handle = GlobalAlloc (GMEM_MOVEABLE, (text.size () + 1) * sizeof (wchar_t));
+
+	if (handle != nullptr)
+	{
+		auto data = (wchar_t *) GlobalLock (handle);
+
+		if (data != nullptr)
+		{
+			memcpy (data, text.c_str (), (text.size () + 1) * sizeof (wchar_t));
+			GlobalUnlock (handle);
+
+			// On success the system owns the allocation, on failure it is
+			// freed here
+			copied = SetClipboardData (CF_UNICODETEXT, handle) != nullptr;
+		}
+
+		if (!copied)
+		{
+			GlobalFree (handle);
+		}
+	}
+
+	CloseClipboard ();
+
+	return copied;
+}
+
+// The text of the windows clipboard as utf-8; empty when there is no text
+// on it
+static std::string clipboard_text ()
+{
+	std::string text;
+
+	// The clipboard serves a single opener at a time
+	if (!OpenClipboard (nullptr))
+	{
+		return text;
+	}
+
+	// The data handle is owned by the clipboard, it is only read here
+	auto handle = GetClipboardData (CF_UNICODETEXT);
+
+	if (handle != nullptr)
+	{
+		auto data = (wchar_t *) GlobalLock (handle);
+
+		if (data != nullptr)
+		{
+			text = maxy::strings::wchartoutf8 (std::wstring { data });
+			GlobalUnlock (handle);
+		}
+	}
+
+	CloseClipboard ();
+
+	return text;
+}
+
+bool FileEditor::normalize_selection (int *start_line, int *start_pos, int *end_line, int *end_pos)
+{
+	auto file = get_file ();
+
+	// Nothing to work with beyond the loaded content
+	if (file == nullptr || selected_ranges.empty () || file->lines.empty ())
+	{
+		return false;
+	}
+
+	// The range oriented from the earlier end to the later one
+	auto range = selected_ranges.front ();
+
+	if (pos_less (range.end_line, range.end_pos, range.start_line, range.start_pos))
+	{
+		std::swap (range.start_line, range.end_line);
+		std::swap (range.start_pos, range.end_pos);
+	}
+
+	// An empty range selects nothing
+	if (range.start_line == range.end_line && range.start_pos == range.end_pos)
+	{
+		return false;
+	}
+
+	// The range is clamped to the loaded content
+	auto size = (int) file->lines.size ();
+	*start_line = max (0, min (range.start_line, size - 1));
+	*end_line = max (*start_line, min (range.end_line, size - 1));
+	*start_pos = max (0, min (range.start_pos, (int) line_iterator (file, *start_line)->raw_data.size ()));
+	*end_pos = max (0, min (range.end_pos, (int) line_iterator (file, *end_line)->raw_data.size ()));
+
+	// The clamping may have emptied the range
+	if (*start_line == *end_line && *start_pos >= *end_pos)
+	{
+		return false;
+	}
+
+	return true;
+}
+
+std::string FileEditor::selection_text ()
+{
+	int start_line, start_pos, end_line, end_pos;
+
+	if (!normalize_selection (&start_line, &start_pos, &end_line, &end_pos))
+	{
+		return {};
+	}
+
+	auto file = get_file ();
+	auto it = line_iterator (file, start_line);
+
+	// The tail of the first line, the whole lines between the range ends
+	// and the head of the last one, joined with the newline characters
+	std::string text;
+
+	if (start_line == end_line)
+	{
+		text = it->raw_data.substr (start_pos, end_pos - start_pos);
+	}
+	else
+	{
+		auto end_it = line_iterator (file, end_line);
+
+		text = it->raw_data.substr (start_pos);
+
+		for (auto middle = std::next (it); middle != end_it; ++middle)
+		{
+			text += "\n" + middle->raw_data;
+		}
+
+		text += "\n" + end_it->raw_data.substr (0, end_pos);
+	}
+
+	return text;
+}
+
+bool FileEditor::copy_selection ()
+{
+	// The selected text in the internal utf-8 form
+	auto text = selection_text ();
+
+	// Nothing selected: nothing to copy
+	if (text.empty ())
+	{
+		return false;
+	}
+
+	// The clipboard needs the owner window: opened without one, the system
+	// would drop the data on the emptying of the clipboard
+	if (current_display == nullptr || current_display->window == nullptr)
+	{
+		return false;
+	}
+
+	return copy_to_clipboard (current_display->window->hwnd, text);
+}
+
+bool FileEditor::insert_text (const std::string &utf8, int *cursor_line, int *cursor_pos)
+{
+	auto file = get_file ();
+
+	// The empty text changes nothing
+	if (file == nullptr || utf8.empty ())
+	{
+		return false;
+	}
+
+	// The \r characters of the clipboard text (the halves of its CRLF
+	// pairs) do not belong to the file lines
+	auto pasted = utf8;
+
+	for (auto pos = pasted.find ('\r'); pos != std::string::npos; pos = pasted.find ('\r', pos))
+	{
+		pasted.erase (pos, 1);
+	}
+
+	// The beginning of the inserted text in the unmodified file: the old
+	// end of the line when the line is padded, the old end of the file
+	// when the lines are appended
+	auto old_size = (int) file->lines.size ();
+	auto start_line = 0;
+	auto start_pos = 0;
+
+	if (old_size > 0)
+	{
+		start_line = min (*cursor_line, old_size - 1);
+		start_pos = *cursor_line < old_size
+			? min (*cursor_pos, file_line_length (file, *cursor_line))
+			: file_line_length (file, old_size - 1);
+	}
+
+	// The cursor past the end of file: empty lines are appended so that
+	// the cursor line exists and is the last of them
+	if (*cursor_line >= (int) file->lines.size ())
+	{
+		// The line before the appended ones gets the separator; the cursor
+		// line is the new last line and has no newline yet
+		if (!file->lines.empty ())
+		{
+			file->lines.back ().newline = file->newline;
+		}
+
+		while (*cursor_line >= (int) file->lines.size ())
+		{
+			file->lines.push_back ({ {}, file->newline });
+		}
+
+		file->lines.back ().newline.clear ();
+	}
+
+	auto it = line_iterator (file, *cursor_line);
+
+	// The cursor past the end of the line: the line is padded with spaces
+	// up to the cursor so that the text begins at the old end of the line
+	if (*cursor_pos > (int) it->raw_data.size ())
+	{
+		it->raw_data.append (*cursor_pos - (int) it->raw_data.size (), ' ');
+	}
+
+	// The tail of the line goes after the inserted text, keeping the
+	// original newline of the line
+	auto split = (size_t) min (*cursor_pos, (int) it->raw_data.size ());
+	auto tail = it->raw_data.substr (split);
+	auto tail_newline = it->newline;
+	it->raw_data.resize (split);
+
+	auto line_index = *cursor_line;
+
+	// The text is inserted chunk by chunk, the newlines in it split the
+	// line; the separators created by the insertion are the actual newline
+	// of the file, the last chunk line keeps the newline of the tail
+	for (size_t chunk_start = 0; ; )
+	{
+		auto nl = pasted.find ('\n', chunk_start);
+		auto chunk_end = nl == std::string::npos ? pasted.size () : nl;
+
+		it->raw_data += pasted.substr (chunk_start, chunk_end - chunk_start);
+		it->newline = nl == std::string::npos ? tail_newline : file->newline;
+
+		// The edited line may have become the longest one
+		file->measure (*it);
+
+		// The cursor stands just past the inserted text
+		*cursor_line = line_index;
+		*cursor_pos = (int) it->raw_data.size ();
+
+		if (nl == std::string::npos)
+		{
+			break;
+		}
+
+		// The empty line for the next chunk (the explicit FileLine value,
+		// since a bare {} would bind to the initializer_list overload of
+		// insert and insert nothing)
+		it = file->lines.insert (std::next (it), FileLine {});
+		line_index++;
+		chunk_start = nl + 1;
+	}
+
+	// The tail goes after the inserted text
+	it->raw_data += tail;
+	file->measure (*it);
+
+	// The undo operation removes everything the input has added: the line
+	// padding, the appended empty lines and the text itself
+	record_undo
+	({
+		.type = UndoType::remove,
+		.start_line = start_line,
+		.start_pos = start_pos,
+		.end_line = *cursor_line,
+		.end_pos = *cursor_pos
+	});
+
+	return true;
+}
+
+bool FileEditor::paste_clipboard (int *cursor_line, int *cursor_pos)
+{
+	// The text of the clipboard
+	auto text = clipboard_text ();
+
+	// Nothing on the clipboard: the key is not handled
+	if (text.empty ())
+	{
+		return false;
+	}
+
+	// The selected fragment is replaced by the text: the deletion records
+	// its own undo operation and lands the cursor at its place
+	if (!selected_ranges.empty ())
+	{
+		delete_selection (cursor_line, cursor_pos);
+	}
+
+	// The text is inserted at the cursor place
+	return insert_text (text, cursor_line, cursor_pos);
+}
+
+bool FileEditor::delete_selection (int *cursor_line, int *cursor_pos)
+{
+	// The text of the selection goes into the undo operation
+	auto removed = selection_text ();
+
+	int start_line, start_pos, end_line, end_pos;
+
+	// Nothing selected: the plain single-character behavior applies
+	if (!normalize_selection (&start_line, &start_pos, &end_line, &end_pos))
+	{
+		return false;
+	}
+
+	auto file = get_file ();
+	auto it = line_iterator (file, start_line);
+
+	// The tail of the first line and the head of the last one merge
+	// together, the lines between them disappear; the merged line keeps
+	// the newline of the last line of the range
+	if (start_line == end_line)
+	{
+		it->raw_data.erase (start_pos, end_pos - start_pos);
+	}
+	else
+	{
+		auto end_it = line_iterator (file, end_line);
+
+		it->raw_data.resize (start_pos);
+		it->raw_data += end_it->raw_data.substr (end_pos);
+		it->newline = end_it->newline;
+
+		file->lines.erase (std::next (it), std::next (end_it));
+	}
+
+	// The edited line may have become the longest one
+	file->measure (*it);
+
+	// The cursor is left at the place of the removal
+	*cursor_line = start_line;
+	*cursor_pos = start_pos;
+
+	// The selection is consumed by the deletion
+	selected_ranges.erase (selected_ranges.begin ());
+	selection_finalized = true;
+
+	// The undo operation inserts the removed text back
+	record_undo
+	({
+		.type = UndoType::insert,
+		.line = start_line,
+		.pos = start_pos,
+		.text = removed
+	});
+
+	return true;
+}
+
+bool FileEditor::replace_selection (unsigned int key, int modifiers, int *cursor_line, int *cursor_pos)
+{
+	// No selection: the typed characters go to the cursor place instead
+	if (selected_ranges.empty ())
+	{
+		return false;
+	}
+
+	wchar_t chars[8] = {};
+	auto converted = 0;
+
+	auto file = get_file ();
+
+	if (file == nullptr || file->lines.empty () || !typed_chars (key, modifiers, chars, &converted))
+	{
+		return false;
+	}
+
+	// The range oriented from the earlier end to the later one
+	auto range = selected_ranges.front ();
+
+	if (pos_less (range.end_line, range.end_pos, range.start_line, range.start_pos))
+	{
+		std::swap (range.start_line, range.end_line);
+		std::swap (range.start_pos, range.end_pos);
+	}
+
+	// A selection spanning several lines is replaced by its deletion
+	// followed by the plain insertion: the single replace undo operation
+	// does not span several lines, and neither does the typed text with a
+	// newline in it
+	bool multiline = range.start_line != range.end_line;
+
+	for (int i = 0; !multiline && i < converted; i++)
+	{
+		multiline = chars[i] == L'\r' || chars[i] == L'\n';
+	}
+
+	if (multiline)
+	{
+		if (!delete_selection (cursor_line, cursor_pos))
+		{
+			return false;
+		}
+
+		return insert_typed_char (key, modifiers, cursor_line, cursor_pos);
+	}
+
+	// The single-line replacement: the selection content is erased and the
+	// typed characters take its place, all on the same line
+	auto line = max (0, min (range.start_line, (int) file->lines.size () - 1));
+	auto it = line_iterator (file, line);
+
+	auto start = max (0, min (range.start_pos, (int) it->raw_data.size ()));
+	auto end = max (start, min (range.end_pos, (int) it->raw_data.size ()));
+
+	std::string inserted;
+	auto removed = it->raw_data.substr (start, end - start);
+
+	it->raw_data.erase (start, end - start);
+
+	for (int i = 0; i < converted; i++)
+	{
+		auto utf8 = maxy::strings::wchartoutf8 (std::wstring { chars[i] });
+
+		it->raw_data.insert ((size_t) start + inserted.size (), utf8);
+		inserted += utf8;
+	}
+
+	// The edited line may have become the longest one
+	file->measure (*it);
+
+	// The cursor stands just past the inserted characters
+	*cursor_line = line;
+	*cursor_pos = start + (int) inserted.size ();
+
+	// The selection is consumed by the replacement
+	selected_ranges.erase (selected_ranges.begin ());
+	selection_finalized = true;
+
+	// The undo puts the replaced characters back in place of the inserted
+	// ones
+	record_undo
+	({
+		.type = UndoType::replace,
+		.line = line,
+		.pos = start,
+		.text = inserted,
+		.removed = removed
+	});
+
+	return true;
+}
+
 bool FileEditor::undo_last (int *cursor_line, int *cursor_pos)
 {
 	if (undo_stack.empty ())
@@ -1809,7 +2322,10 @@ void FileEditor::apply_undo_insert (const UndoOperation &op, int *cursor_line, i
 			break;
 		}
 
-		it = file->lines.insert (std::next (it), {});
+		// The empty line for the next chunk: the explicit FileLine value,
+		// since a bare {} would bind to the initializer_list overload of
+		// insert and insert nothing
+		it = file->lines.insert (std::next (it), FileLine {});
 		line_index++;
 		chunk_start = nl + 1;
 	}

@@ -218,7 +218,13 @@ bool FuncMenu::handle_click (::Wenv::Display::Rect client_area, ::Wenv::Display:
 	}
 
 	active_commands[index].action (current_display, current_context);
-	redraw_all ();
+
+	// An action that has opened a modal leaves the display fully redrawn
+	// with the modal on top; the apps must not redraw themselves over it
+	if (current_display->current_modal == nullptr)
+	{
+		redraw_all ();
+	}
 
 	return true;
 }

@@ -99,6 +99,10 @@ class FileEditor : public App
 	int * get_file_cursor_line (const std::wstring &full_path);
 	int * get_file_cursor_pos (const std::wstring &full_path);
 
+	// The editing internals are open to the subclasses, which lets the
+	// tests drive the editing and the undo directly
+protected:
+
 	// Convert the typed key into its unicode character and insert it into the
 	// edited file at the cursor position; returns false when the key produced
 	// no text
@@ -114,6 +118,42 @@ class FileEditor : public App
 	// the file when the cursor is past the end of file); returns false when
 	// there is nothing to remove
 	bool delete_at_cursor (int *cursor_line, int *cursor_pos);
+
+	// Remove the whole first selected range, merging the lines it spans into
+	// one; the selection is consumed. Returns false when there is nothing
+	// selected to remove
+	bool delete_selection (int *cursor_line, int *cursor_pos);
+
+	// Replace the first selected range with the characters produced by the
+	// typed key; a selection spanning several lines (or a text with a newline
+	// in it) is replaced by its deletion followed by the plain insertion.
+	// Returns false when there is no selection or the key produces no text
+	bool replace_selection (unsigned int key, int modifiers, int *cursor_line, int *cursor_pos);
+
+	// The first selected range oriented from its earlier end to the later
+	// one and clamped to the loaded content; false when there is nothing
+	// selected to work with
+	bool normalize_selection (int *start_line, int *start_pos, int *end_line, int *end_pos);
+
+	// The text of the first selected range: the tail of its first line, the
+	// whole lines between the range ends and the head of the last one,
+	// joined with the newline characters; empty when there is nothing
+	// selected
+	std::string selection_text ();
+
+	// The selected text to the windows clipboard; false when there is
+	// nothing selected or the clipboard is not available
+	bool copy_selection ();
+
+	// Insert the utf-8 text (a clipboard fragment) at the cursor position,
+	// which ends up just past the inserted text; the recorded undo operation
+	// removes the inserted text again. Returns false when there is nothing
+	// to insert
+	bool insert_text (const std::string &utf8, int *cursor_line, int *cursor_pos);
+
+	// The clipboard text pasted at the cursor or in place of the selection
+	// when there is one; false when the clipboard holds no text
+	bool paste_clipboard (int *cursor_line, int *cursor_pos);
 
 	// Move the cursor to the first character of the nearest word to the left,
 	// continuing on the previous lines; stops at the beginning of the file
